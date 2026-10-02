@@ -7,11 +7,14 @@ Pipeline_executed.ipynb
 # Pastas geradas pela extração
 COMANDO DE OPERAÇÕES TERRESTRES*/
 Manual de Campanha*/
-Gerados/
+
 # Chaves de API e Segredos
 .env
 
-# Documentos Originais e Processados (Não commitar os manuais doutrinários)
-Arquivos/
+# Arquivos Originais e Processados (Ignora o conteúdo, mas envia a pasta vazia)
+Arquivos/*
+!Arquivos/.gitkeep
+Gerados/*
+!Gerados/.gitkeep
 *.pdf
 *.xml
