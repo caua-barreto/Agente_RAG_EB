@@ -1,0 +1,10 @@
+PyMuPDF
+lxml
+rank_bm25
+openai
+PyYAML
+python-dotenv
+fastapi
+uvicorn
+pytesseract
+Pillow

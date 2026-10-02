@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PreparAI — Pesquisa Documental</title>
+
+    <!-- Fontes tecnológicas -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@600&family=Work+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- marked.js — converte Markdown em HTML (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+
+    <!-- O novo nome do arquivo força o navegador a baixar a versão nova e ignorar o cache -->
+    <link rel="stylesheet" href="/static/app_v2.css" />
+  </head>
+  <body>
+
+    <div class="app-shell" id="app">
+
+      <!-- ── Sidebar ──────────────────────────────────────────────────── -->
+      <aside class="app-sidebar" aria-label="Navegação principal">
+
+        <!-- Branding: PreparAI + Exército Brasileiro -->
+        <div class="sb-brand">
+          <svg class="sb-brand-icon" width="22" height="22" viewBox="0 0 22 22"
+               fill="none" aria-hidden="true">
+            <rect x="2"  y="3"   width="18" height="3" rx="1.5" fill="currentColor"/>
+            <rect x="2"  y="9.5" width="12" height="3" rx="1.5" fill="currentColor"/>
+            <rect x="2"  y="16"  width="8"  height="3" rx="1.5" fill="currentColor"/>
+          </svg>
+          <span class="sb-brand-text">PreparAI</span>
+        </div>
+
+        <!-- Bloco Exército Brasileiro -->
+        <div class="sb-eb-block">
+          <img
+            src="/static/eb-brasao.png"
+            alt="Brasão do Exército Brasileiro"
+            class="sb-eb-logo"
+            onerror="this.style.display='none'"
+          />
+          <span class="sb-eb-label">Exército Brasileiro</span>
+        </div>
+
+        <div class="sb-divider" aria-hidden="true"></div>
+
+        <!-- Botão Nova Conversa -->
+        <div class="sb-actions">
+          <button class="sb-btn-new" id="btn-nova-conversa" title="Iniciar nova conversa">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M7 2v10M2 7h10" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <span>Nova Conversa</span>
+          </button>
+        </div>
+
+        <!-- Histórico de conversas (até 5) -->
+        <div class="sb-history-section">
+          <span class="sb-history-label">Recentes</span>
+          <ul class="sb-history-list" id="lista-historico" aria-label="Conversas recentes">
+            <!-- Preenchido dinamicamente pelo app.js -->
+          </ul>
+        </div>
+
+        <!-- Rodapé -->
+        <div class="sb-foot">
+          <span class="sb-version">v1.5 · EB RAG</span>
+        </div>
+      </aside>
+
+      <!-- ── Coluna principal do chat ─────────────────────────────────── -->
+      <div class="chat-column">
+
+        <header class="topbar">
+          <div style="min-width:0; flex:1">
+            <h1 id="titulo-conversa" class="muted">Nova conversa</h1>
+          </div>
+        </header>
+
+        <div class="messages" id="mensagens"></div>
+
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="composer-box">
+              <div class="composer-top">
+                <textarea
+                  id="entrada"
+                  rows="1"
+                  placeholder="Faça uma consulta documental..."
+                  aria-label="Consulta"
+                ></textarea>
+                <button class="btn-send" id="btn-enviar" aria-label="Enviar consulta">
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor"
+                          stroke-width="1.6" stroke-linecap="round"
+                          stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="composer-filters" id="linha-filtros">
+                <span class="composer-hint">Enter para enviar · Shift+Enter para nova linha</span>
+              </div>
+            </div>
+            <div class="composer-foot">
+              PREPARAI · ASSISTENTE DE PESQUISA DOCUMENTAL · VERIFIQUE SEMPRE AS FONTES ORIGINAIS
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /chat-column -->
+    </div><!-- /app-shell -->
+
+    <div id="camada-modal"></div>
+    <div id="camada-toast"></div>
+
+    <!-- O novo nome do arquivo força o navegador a baixar a versão nova e ignorar o cache -->
+    <script src="/static/app_v2.js"></script>
+  </body>
+</html>
