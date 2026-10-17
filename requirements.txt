@@ -8,3 +8,5 @@ fastapi
 uvicorn
 pytesseract
 Pillow
+requests
+beautifulsoup4
