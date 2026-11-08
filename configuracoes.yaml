@@ -1,7 +1,11 @@
 # Configurações do Agente Virtual Militar — PreparAI
 
 caminhos:
-  pasta_xml: "Gerados" # Pasta onde o Pipeline.ipynb salva os arquivos processados
+  pasta_arquivos: "Arquivos"                     # Pasta onde o webscraping.py baixa os PDFs vigentes
+  pasta_revogados: "Arquivos/Revogados"          # Pasta onde o webscraping.py separa os PDFs revogados
+  pasta_xml: "Gerados"                           # Pasta onde o pipeline.py salva os arquivos XML processados
+  pasta_imagens: "Imagens"                       # Pasta onde o pipeline.py exporta as imagens das seções
+  catalogo_bdex: "webscraping/Coleta/manuais_campanha.json" # Catálogo JSON gerado pelo webscraping.py
 
 modelo:
   nome: "deepseek-chat"

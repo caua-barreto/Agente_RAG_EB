@@ -76,15 +76,19 @@ O projeto está em sua **fase base V1.5** e serve como prova de conceito e avali
    ```env
    DEEPSEEK_API_KEY=sua_chave_aqui
    ```
-3. Converta seus manuais em PDF para XML usando a pipeline:
+3. (Opcional) Baixe automaticamente os Manuais de Campanha da BDEx para a pasta `Arquivos/`:
+   ```bash
+   python webscraping/webscraping.py
+   ```
+4. Converta seus manuais em PDF para XML usando a pipeline:
    ```bash
    python scripts/pipeline.py
    ```
-4. Inicie o servidor:
+5. Inicie o servidor:
    ```bash
    python main.py
    ```
-5. Acesse `http://localhost:8000` em seu navegador.
+6. Acesse `http://localhost:8000` em seu navegador.
 
 **Desenvolvido por:** [Cauã Barreto](https://www.linkedin.com/in/caua-fbarreto-) e [João Pedroti](https://www.linkedin.com/in/jo%C3%A3o-pedroti-0a3a62360/)
 

@@ -4,7 +4,8 @@ __pycache__/
 .ipynb_checkpoints/
 Pipeline_executed.ipynb
 
-# Pastas geradas pela extração
+# Pastas geradas pela extração de imagens
+Imagens/
 COMANDO DE OPERAÇÕES TERRESTRES*/
 Manual de Campanha*/
 
@@ -18,3 +19,4 @@ Gerados/*
 !Gerados/.gitkeep
 *.pdf
 *.xml
+*.parcial

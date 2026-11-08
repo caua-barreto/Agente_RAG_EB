@@ -1,13 +1,20 @@
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Permite importar pacotes da .venv local caso o script seja chamado pelo python do sistema
+_DIR = Path(__file__).resolve().parent
+_VENV_SITE = _DIR / ".venv" / "lib" / "python3.12" / "site-packages"
+if _VENV_SITE.exists() and str(_VENV_SITE) not in sys.path:
+    sys.path.insert(0, str(_VENV_SITE))
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import assistente
 
-# Raiz do projeto — garante que os caminhos funcionem independente do CWD
-_DIR = Path(__file__).resolve().parent
+# Caminhos estáticos relativos à raiz do projeto
 _STATIC = _DIR / "frontend" / "static"
 _INDEX  = _STATIC / "index.html"
 
@@ -20,7 +27,6 @@ async def lifespan(app: FastAPI):
     assistente.carregar_xmls()
     assistente.preparar_motor_de_busca()
     yield
-    # (limpeza na parada, se necessário no futuro)
 
 
 app = FastAPI(
@@ -35,9 +41,7 @@ class ChatRequest(BaseModel):
     mensagem: str
 
 
-from fastapi.responses import FileResponse, StreamingResponse
-
-# ── Rota da API de chat ───────────────────────────────────────────────────
+# ── Rotas da API de chat ──────────────────────────────────────────────────
 @app.post("/api/chat")
 async def chat_endpoint(req: ChatRequest):
     """Recebe a mensagem do front-end, consulta o RAG e retorna a resposta."""
@@ -50,17 +54,24 @@ async def chat_endpoint(req: ChatRequest):
         print(f"ERRO em /api/chat: {e}")
         raise HTTPException(status_code=500, detail="Erro interno ao processar a consulta.")
 
+
 @app.post("/api/chat/stream")
 async def chat_stream_endpoint(req: ChatRequest):
     """Rota para streaming contínuo da resposta do LLM."""
     if not req.mensagem.strip():
         raise HTTPException(status_code=400, detail="Mensagem não pode ser vazia.")
-    
+
     return StreamingResponse(
         assistente.perguntar_ao_assistente_stream(req.mensagem),
-        media_type="text/plain"
+        media_type="text/plain",
     )
 
+
+@app.post("/api/nova-conversa")
+async def nova_conversa_endpoint():
+    """Limpa o histórico de mensagens FIFO da sessão atual no servidor."""
+    assistente.limpar_historico()
+    return {"status": "ok"}
 
 
 # ── Arquivos estáticos (CSS, JS, imagens) ─────────────────────────────────
