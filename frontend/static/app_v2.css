@@ -2331,15 +2331,14 @@ textarea {
 }
 
 /* ===========================================================================
-   PreparAI — Componentes do Chat Simplificado (app.js)
-   Estilos para as bolhas, loading indicator e brand mark militar.
+   PreparAI — Componentes do Chat, Sidebar e Refinamentos UX/UI
    =========================================================================== */
 
 /* ── Layout das mensagens do chat ──────────────────────────────────────────── */
 .msg {
   display: flex;
-  margin-bottom: 16px;
-  padding: 0 16px;
+  margin-bottom: 18px;
+  padding: 0;
 }
 .msg.user  { justify-content: flex-end; }
 .msg.ai    { justify-content: flex-start; }
@@ -2348,33 +2347,33 @@ textarea {
 .user-content {
   background: var(--user-bg);
   color: #e8edda;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 14px 14px 4px 14px;
   padding: 12px 18px;
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.65;
   max-width: 72%;
-  box-shadow: 0 2px 8px rgba(28, 36, 16, 0.25);
+  box-shadow: 0 2px 6px rgba(28, 36, 16, 0.18);
 }
 
-/* ── Bolha da IA ──────────────────────────────────────────────────────────── */
+/* ── Bolha da IA (fundo branco puro + borda suavizada + shadow-sm) ────────── */
 .ai-content {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--olive);
-  border-radius: 4px 16px 16px 16px;
-  padding: 14px 18px;
-  font-size: 13px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-left: 3.5px solid var(--olive);
+  border-radius: 6px 14px 14px 14px;
+  padding: 16px 20px;
+  font-size: 13.5px;
   line-height: 1.75;
   color: var(--text);
   max-width: 84%;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 /* Label "PreparAI" dentro da bolha */
 .ai-label {
   display: block;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.18em;
   color: var(--olive);
@@ -2382,7 +2381,7 @@ textarea {
   margin-bottom: 8px;
 }
 
-/* Subtítulos e listas renderizados via markdownToHtml */
+/* Subtítulos e listas renderizados via Markdown */
 .ai-subtitle {
   font-size: 12px;
   font-weight: 700;
@@ -2452,20 +2451,30 @@ textarea {
   50%       { opacity: 1;   }
 }
 
-/* ── Botão de envio: verde quando ativo ───────────────────────────────────── */
+/* ── Botão de envio: fundo sólido verde-oliva e seta em branco ────────────── */
 .btn-send {
-  background: var(--border) !important;
-  color: var(--text-muted) !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 7px !important;
+  background: var(--olive) !important;
+  color: #ffffff !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(74, 94, 42, 0.25);
+  transition: background 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease !important;
 }
 .btn-send:not(:disabled):hover,
-.btn-send.ready {
-  background: var(--olive) !important;
-  color: #fff !important;
-  cursor: pointer;
+.btn-send.ready:not(:disabled):hover {
+  background: #3a4a1f !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(74, 94, 42, 0.35);
+}
+.btn-send:not(:disabled):active {
+  transform: scale(0.96);
 }
 .btn-send:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
 }
 
 /* ── Brand mark: verde-oliva ──────────────────────────────────────────────── */
@@ -2473,24 +2482,8 @@ textarea {
   background: var(--olive) !important;
 }
 
-/* ── Botão "Nova conversa": verde ─────────────────────────────────────────── */
-.btn-new {
-  background: var(--olive-light) !important;
-  border-color: var(--olive-border) !important;
-  color: var(--olive) !important;
-}
-.btn-new:hover {
-  background: var(--olive) !important;
-  color: #fff !important;
-}
-
-/* ── Topbar: borda inferior verde sutil ───────────────────────────────────── */
-.topbar {
-  border-bottom: 2px solid var(--olive-border) !important;
-}
-
 /* ===========================================================================
-   PreparAI — Sidebar + Shell Layout (nova estrutura)
+   PreparAI — Sidebar + Shell Layout
    Garante: sidebar fixa | messages flex:1 + overflow-y:auto | composer fixo
    =========================================================================== */
 
@@ -2505,187 +2498,59 @@ textarea {
   display: flex;
   height: 100vh;
   overflow: hidden;         /* impede que o body todo role */
-  background: var(--bg);
+  background: #f8f9fa;      /* cinza muito claro (bg-gray-50) */
 }
 
 /* ── Sidebar vertical fixa ───────────────────────────────────────────────── */
 .app-sidebar {
-  width: 210px;
+  width: 230px;
   flex-shrink: 0;
   background: #ffffff;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid #e5e7eb;
   display: flex;
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  /* Sombra direcional suave para separar do conteúdo */
-  box-shadow: 2px 0 8px rgba(74, 94, 42, 0.06);
+  box-shadow: 2px 0 10px rgba(15, 23, 42, 0.03);
 }
 
-/* ── Logo / Brand ────────────────────────────────────────────────────────── */
+/* ── Logo / Brand (Canto Superior Esquerdo) ──────────────────────────────── */
 .sb-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 20px 16px 16px;
-  /* Borda inferior verde-oliva fina como acento */
-  border-bottom: 2px solid var(--olive-light);
+  gap: 12px;
+  padding: 18px 16px 14px;
+  border-bottom: 1px solid var(--olive-light);
 }
 
-.sb-brand-icon {
-  color: var(--olive);
+.sb-brand-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
   flex-shrink: 0;
-  /* Pequeno efeito de brilho ao redor do ícone */
-  filter: drop-shadow(0 0 4px rgba(74, 94, 42, 0.25));
+  border-radius: 8px;
+  filter: drop-shadow(0 1px 3px rgba(74, 94, 42, 0.15));
 }
 
 .sb-brand-text {
-  font-size: 19px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--olive);
   line-height: 1;
-  /* Garante que letras tecnológicas não sejam cortadas */
   white-space: nowrap;
 }
-
-/* ── Divisor ──────────────────────────────────────────────────────────────── */
-.sb-divider {
-  height: 1px;
-  background: linear-gradient(
-    to right,
-    var(--olive-border),
-    transparent
-  );
-  margin: 0 16px;
-}
-
-/* ── Área de ações (botão Nova Conversa) ─────────────────────────────────── */
-.sb-actions {
-  padding: 14px 12px 8px;
-}
-
-.sb-btn-new {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 14px;
-  border-radius: 6px;
-  /* Estado padrão: borda verde, fundo branco, texto verde */
-  background: #ffffff;
-  border: 1.5px solid var(--olive-border);
-  color: var(--olive);
-  font-family: var(--sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease,
-              box-shadow 0.18s ease;
-}
-
-.sb-btn-new:hover {
-  /* Hover: preenche com verde-militar, texto branco */
-  background: var(--olive);
-  border-color: var(--olive);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(74, 94, 42, 0.28);
-}
-
-.sb-btn-new:active {
-  background: #3a4a1f;
-  border-color: #3a4a1f;
-}
-
-.sb-btn-new svg {
-  flex-shrink: 0;
-  opacity: 0.9;
-}
-
-/* ── Rodapé da sidebar ───────────────────────────────────────────────────── */
-.sb-foot {
-  margin-top: auto;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-}
-
-.sb-version {
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-/* ── Coluna do chat ──────────────────────────────────────────────────────── */
-.chat-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;          /* permite que filhos encolham */
-  height: 100vh;
-  overflow: hidden;
-}
-
-/*
-  Garante a estrutura de 3 camadas:
-  1. .topbar      → altura intrínseca, não encolhe
-  2. .messages    → ocupa todo o espaço restante, rola por dentro
-  3. .composer    → altura intrínseca, não encolhe
-*/
-.chat-column .topbar {
-  flex-shrink: 0;
-}
-
-.chat-column .messages {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.chat-column .composer {
-  flex-shrink: 0;
-}
-
-/* ── Topbar dentro do chat-column ────────────────────────────────────────── */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-  gap: 12px;
-}
-
-.topbar h1 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-  line-height: 1.3;
-}
-
-.topbar h1.muted {
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-/* ===========================================================================
-   PreparAI — Adições de UI: Markdown, Histórico FIFO, Brasão EB
-   =========================================================================== */
 
 /* ── Bloco Exército Brasileiro na sidebar ─────────────────────────────────── */
 .sb-eb-block {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 16px 12px;
+  gap: 10px;
+  padding: 10px 16px 14px;
 }
 
 .sb-eb-logo {
-  max-width: 40px;
+  max-width: 36px;
   height: auto;
   object-fit: contain;
   flex-shrink: 0;
@@ -2701,23 +2566,77 @@ textarea {
   line-height: 1.3;
 }
 
-/* ── Seção de histórico na sidebar ───────────────────────────────────────── */
+/* ── Divisor ──────────────────────────────────────────────────────────────── */
+.sb-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    var(--olive-border),
+    transparent
+  );
+  margin: 0 16px;
+}
+
+/* ── Área de ações (botão + Nova Conversa destacado) ─────────────────────── */
+.sb-actions {
+  padding: 16px 16px 10px;
+}
+
+.sb-btn-new {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 7px;
+  /* Fundo verde translúcido (bg-green-50) + borda verde definida */
+  background: var(--olive-light, #f0f4e8);
+  border: 1.5px solid #b5c488;
+  color: var(--olive, #4a5e2a);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+              box-shadow 0.16s ease, transform 0.1s ease;
+}
+
+.sb-btn-new:hover {
+  /* Hover: verde translúcido mais intenso (hover:bg-green-100) e borda viva */
+  background: #e1ead2;
+  border-color: var(--olive, #4a5e2a);
+  color: #2f3d19;
+  box-shadow: 0 2px 6px rgba(74, 94, 42, 0.14);
+}
+
+.sb-btn-new:active {
+  background: #d4e1be;
+  transform: translateY(1px);
+}
+
+.sb-btn-new svg {
+  flex-shrink: 0;
+}
+
+/* ── Seção de histórico na sidebar (RECENTES fluida) ─────────────────────── */
 .sb-history-section {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 8px 0 0;
+  padding: 12px 0 8px;
   overflow: hidden;
 }
 
 .sb-history-label {
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-muted, #999);
-  padding: 0 16px 6px;
+  color: var(--text-muted, #7a8060);
+  padding: 0 16px 8px;
 }
 
 .sb-history-list {
@@ -2729,9 +2648,9 @@ textarea {
 }
 
 .sb-history-empty {
-  font-size: 11px;
-  color: var(--text-muted, #aaa);
-  padding: 4px 16px;
+  font-size: 11.5px;
+  color: var(--text-muted, #999);
+  padding: 6px 16px;
   font-style: italic;
 }
 
@@ -2747,10 +2666,10 @@ textarea {
   align-items: flex-start;
   gap: 2px;
   width: 100%;
-  padding: 7px 14px;
+  padding: 8px 16px;
   background: transparent;
   border: none;
-  border-left: 2px solid transparent;
+  border-left: 2.5px solid transparent;
   cursor: pointer;
   text-align: left;
   transition: background 0.14s, border-color 0.14s;
@@ -2762,13 +2681,13 @@ textarea {
 }
 
 .sb-history-title {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text, #0d0d0d);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 170px;
+  max-width: 190px;
 }
 
 .sb-history-time {
@@ -2777,11 +2696,147 @@ textarea {
   letter-spacing: 0.02em;
 }
 
+/* ── Rodapé da sidebar ───────────────────────────────────────────────────── */
+.sb-foot {
+  margin-top: auto;
+  padding: 14px 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.sb-version {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Coluna do chat ──────────────────────────────────────────────────────── */
+.chat-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: #f8f9fa;      /* fundo cinza muito claro (bg-gray-50) */
+}
+
+.chat-column .topbar {
+  flex-shrink: 0;
+}
+
+.chat-column .messages {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 24px;
+}
+
+.chat-column .composer {
+  flex-shrink: 0;
+}
+
+/* ── Cabeçalho Principal (.topbar) e Status de Documentos ────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: #ffffff;
+  border-bottom: 1.5px solid var(--olive-border) !important;
+  gap: 16px;
+}
+
+.topbar-left {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.topbar h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.topbar h1.muted {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* Texto limpo e minimalista no canto superior direito ("📄 121 documentos carregados") */
+.topbar-doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans);
+  font-size: 13px;          /* text-sm */
+  font-weight: 600;         /* semibold/medium */
+  color: var(--olive);      /* verde-oliva/militar do tema */
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--olive-light, #f0f4e8);
+  border: 1px solid var(--olive-border, #c5d097);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+/* ── Área de Input (Bottom Composer) com sombreamento e destaque ─────────── */
+.composer {
+  padding: 16px 24px;
+  background: #f8f9fa;
+  border-top: 1px solid #e5e7eb;
+}
+
+.composer-box {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.composer-box:focus-within {
+  border-color: var(--olive);
+  box-shadow: 0 4px 12px rgba(74, 94, 42, 0.12), 0 1px 3px rgba(74, 94, 42, 0.08);
+}
+
+.composer-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.composer-top textarea {
+  font-size: 13.5px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  flex: 1;
+  line-height: 1.55;
+  max-height: 140px;
+}
+
+.composer-filters {
+  border-top: 1px solid #f1f3ee;
+  padding: 6px 14px;
+}
+
 /* ── Corpo Markdown das respostas da IA (.md-body) ───────────────────────── */
-/*
-  Garante que o HTML gerado pelo marked.js seja estilizado de forma limpa,
-  com espaçamento adequado entre elementos.
-*/
 .md-body {
   font-size: 13.5px;
   line-height: 1.7;
@@ -2789,7 +2844,6 @@ textarea {
   word-break: break-word;
 }
 
-/* Parágrafos */
 .md-body p {
   margin: 0 0 10px;
 }
@@ -2797,7 +2851,6 @@ textarea {
   margin-bottom: 0;
 }
 
-/* Títulos H1–H3 gerados pelo marked */
 .md-body h1,
 .md-body h2,
 .md-body h3,
@@ -2812,7 +2865,6 @@ textarea {
 .md-body h3,
 .md-body h4 { font-size: 13px; letter-spacing: 0.01em; }
 
-/* Listas — padding adequado para não ficar colado */
 .md-body ul,
 .md-body ol {
   margin: 6px 0 10px;
@@ -2828,13 +2880,11 @@ textarea {
   margin-bottom: 0;
 }
 
-/* Listas aninhadas */
 .md-body li ul,
 .md-body li ol {
   margin: 4px 0 2px;
 }
 
-/* Negrito e itálico */
 .md-body strong {
   font-weight: 700;
   color: var(--text, #0d0d0d);
@@ -2843,7 +2893,6 @@ textarea {
   font-style: italic;
 }
 
-/* Código inline */
 .md-body code {
   font-family: "Share Tech Mono", "Courier New", monospace;
   font-size: 12px;
@@ -2853,7 +2902,6 @@ textarea {
   border-radius: 3px;
 }
 
-/* Blocos de código */
 .md-body pre {
   background: #1c2410;
   color: #d4e8a0;
@@ -2870,14 +2918,12 @@ textarea {
   padding: 0;
 }
 
-/* Linha horizontal */
 .md-body hr {
   border: none;
   border-top: 1px solid var(--border, #e0e0e0);
   margin: 14px 0;
 }
 
-/* Citações */
 .md-body blockquote {
   border-left: 3px solid var(--olive-border, #c5d097);
   margin: 8px 0;
@@ -2886,7 +2932,6 @@ textarea {
   font-style: italic;
 }
 
-/* Tabelas */
 .md-body table {
   border-collapse: collapse;
   width: 100%;
@@ -2903,216 +2948,5 @@ textarea {
   background: var(--olive-light, #f0f4e8);
   font-weight: 600;
   color: var(--olive, #4a5e2a);
-}
-
-/* ===========================================================================
-   Catálogo Visual de Documentos Indexados (Manuais Ativos)
-   =========================================================================== */
-
-.sb-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sb-btn-catalog {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--olive-light, #f0f4e8);
-  border: 1px solid var(--olive-border, #c5d097);
-  color: var(--olive, #4a5e2a);
-  font-family: var(--sans);
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.16s ease;
-}
-
-.sb-btn-catalog:hover {
-  background: var(--olive, #4a5e2a);
-  border-color: var(--olive, #4a5e2a);
-  color: #ffffff;
-}
-
-.sb-catalog-badge {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  background: #ffffff;
-  color: var(--olive, #4a5e2a);
-  border: 1px solid var(--olive-border, #c5d097);
-  border-radius: 10px;
-  padding: 1px 7px;
-  line-height: 1.4;
-}
-
-.sb-btn-catalog:hover .sb-catalog-badge {
-  background: rgba(255, 255, 255, 0.2);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-.topbar-catalog-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: var(--olive-light, #f0f4e8);
-  border: 1px solid var(--olive-border, #c5d097);
-  color: var(--olive, #4a5e2a);
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.topbar-catalog-pill:hover {
-  background: var(--olive, #4a5e2a);
-  color: #ffffff;
-  border-color: var(--olive, #4a5e2a);
-}
-
-.topbar-catalog-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #15803d;
-  box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.2);
-}
-
-.topbar-catalog-pill:hover .topbar-catalog-dot {
-  background: #bbf7d0;
-}
-
-.modal.catalog-modal {
-  max-width: 740px;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.catalog-modal-head {
-  background: var(--surface, #f7f8f4);
-  padding: 16px 20px;
-}
-
-.catalog-subtitle {
-  display: block;
-  font-size: 11px;
-  color: var(--text-muted, #7a8060);
-  margin-top: 3px;
-}
-
-.catalog-stats-bar {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 12px 20px;
-  background: var(--olive-light, #f0f4e8);
-  border-bottom: 1px solid var(--olive-border, #c5d097);
-}
-
-.catalog-stat-pill {
-  background: #ffffff;
-  border: 1px solid var(--olive-border, #c5d097);
-  border-radius: 6px;
-  padding: 8px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.catalog-stat-pill strong {
-  font-family: var(--mono);
-  font-size: 16px;
-  color: var(--olive, #4a5e2a);
-  line-height: 1.2;
-}
-
-.catalog-stat-pill span {
-  font-size: 10px;
-  color: var(--text-muted, #7a8060);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 2px;
-}
-
-.catalog-search-bar {
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #ffffff;
-}
-
-.catalog-search-bar input {
-  flex: 1;
-  font-size: 12.5px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--text);
-  outline: none;
-}
-
-.catalog-search-bar input:focus {
-  border-color: var(--olive, #4a5e2a);
-  background: #ffffff;
-}
-
-.catalog-filter-count {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.catalog-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 220px;
-  max-height: 48vh;
-  background: var(--surface, #f7f8f4);
-}
-
-.catalog-doc-row {
-  border-left: 3px solid var(--olive, #4a5e2a);
-}
-
-.catalog-doc-row:hover {
-  border-color: var(--olive-border, #c5d097);
-  border-left-color: var(--olive, #4a5e2a);
-  box-shadow: 0 2px 6px rgba(74, 94, 42, 0.08);
-}
-
-.catalog-empty {
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 12.5px;
-}
-
-.catalog-modal-foot {
-  justify-content: space-between;
-  background: #ffffff;
-}
-
-.catalog-foot-hint {
-  font-size: 11px;
-  color: var(--text-muted);
 }
 

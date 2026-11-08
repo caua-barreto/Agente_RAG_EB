@@ -6,11 +6,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const input             = document.getElementById("entrada");
     const sendButton        = document.getElementById("btn-enviar");
     const btnNovaConversa   = document.getElementById("btn-nova-conversa");
-    const btnCatalogo       = document.getElementById("btn-catalogo");
-    const btnCatalogoTopo   = document.getElementById("btn-catalogo-topo");
-    const badgeTotalManuais = document.getElementById("badge-total-manuais");
-    const textoCatalogoTopo = document.getElementById("texto-catalogo-topo");
-    const camadaModal       = document.getElementById("camada-modal");
     const listaHistorico    = document.getElementById("lista-historico");
     const tituloConversa    = document.getElementById("titulo-conversa");
 
@@ -20,20 +15,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // ── Configuração do marked.js ────────────────────────────────────────────
-    // Garante que marked esteja disponível (carregado via CDN no HTML)
     if (typeof marked === "undefined") {
         console.warn("PreparAI: marked.js não carregado. Usando fallback simples.");
+    } else {
+        marked.setOptions({
+            breaks: true,        // \n vira <br> dentro de parágrafos
+            gfm:    true,        // GitHub Flavored Markdown (tabelas, strikethrough etc.)
+        });
     }
-
-    marked.setOptions({
-        breaks: true,        // \n vira <br> dentro de parágrafos
-        gfm:    true,        // GitHub Flavored Markdown (tabelas, strikethrough etc.)
-    });
 
     // ── Converte Markdown em HTML seguro usando marked.js ───────────────────
     function renderMarkdown(text) {
         if (typeof marked === "undefined") {
-            // Fallback básico se o CDN falhar
             return text
                 .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
                 .replace(/^#{1,3}\s+(.+)$/gm, "<h4>$1</h4>")
@@ -120,7 +113,6 @@ document.addEventListener("DOMContentLoaded", () => {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
         // Sincroniza o histórico do servidor com a sessão restaurada
-        // (simplificado: limpa o servidor — a sessão restaurada é só visual)
         fetch("/api/nova-conversa", { method: "POST" }).catch(() => {});
     }
 
@@ -172,6 +164,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     exibirBoasVindas();
 
+    function atualizarEstadoBotaoEnvio() {
+        if (!sendButton || !input) return;
+        if (input.value.trim().length > 0) {
+            sendButton.classList.add("ready");
+        } else {
+            sendButton.classList.remove("ready");
+        }
+    }
+
     function novaConversa() {
         // 1. Persiste a sessão atual antes de limpar
         persistirSessaoAtual();
@@ -188,6 +189,7 @@ document.addEventListener("DOMContentLoaded", () => {
         exibirBoasVindas();
         input.value = "";
         input.style.height = "auto";
+        atualizarEstadoBotaoEnvio();
         input.focus();
 
         if (tituloConversa) {
@@ -211,7 +213,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (tipo === "user") {
             wrapper.innerHTML = `<div class="msg-content user-content">${htmlContent}</div>`;
         } else {
-            // .md-body aplica os estilos de markdown (listas, headings, etc.)
             wrapper.innerHTML = `
                 <div class="msg-content ai-content">
                     <span class="ai-label">PreparAI</span>
@@ -249,6 +250,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messagesContainer.appendChild(criarBolha("user", trimmed));
         input.value = "";
         input.style.height = "auto";
+        atualizarEstadoBotaoEnvio();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
         // Atualiza título da conversa com a primeira pergunta
@@ -266,7 +268,6 @@ document.addEventListener("DOMContentLoaded", () => {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
         try {
-            // Usa a nova rota de Streaming (Opção A: Ideal)
             const response = await fetch("/api/chat/stream", {
                 method:  "POST",
                 headers: { "Content-Type": "application/json" },
@@ -277,7 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Remove o loading
             loadingBubble.remove();
-            
+
             // Cria a bolha vazia para receber o texto progressivo
             const aiBubble = criarBolha("ai", "");
             messagesContainer.appendChild(aiBubble);
@@ -291,12 +292,10 @@ document.addEventListener("DOMContentLoaded", () => {
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
-                
-                // Converte Uint8Array em string e acumula
+
                 const chunk = decoder.decode(value, { stream: true });
                 aiTextAccumulator += chunk;
-                
-                // Renderiza o markdown parcial
+
                 mdBody.innerHTML = renderMarkdown(aiTextAccumulator);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
@@ -318,10 +317,10 @@ document.addEventListener("DOMContentLoaded", () => {
         } finally {
             sendButton.disabled = false;
             sendButton.removeAttribute("aria-busy");
+            atualizarEstadoBotaoEnvio();
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     }
-
 
     // ── Eventos ──────────────────────────────────────────────────────────────
     sendButton.addEventListener("click", () => sendMessage(input.value));
@@ -333,187 +332,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Auto-resize do textarea (máx 160px)
+    // Auto-resize do textarea (máx 160px) + estado visual do botão
     input.addEventListener("input", () => {
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 160) + "px";
+        atualizarEstadoBotaoEnvio();
     });
 
-    // ══════════════════════════════════════════════════════════════════════════
-    //  CATÁLOGO VISUAL DE DOCUMENTOS INDEXADOS (SOMENTE MANUAIS ATIVOS)
-    // ══════════════════════════════════════════════════════════════════════════
-
-    let dadosCatalogo = { total_manuais: 0, total_trechos: 0, total_siglas: 0, manuais: [] };
-
-    async function carregarCatalogo() {
+    // ── Atualização do contador de documentos ativos (não negados) ───────────
+    const statusDocumentosTopo = document.getElementById("status-documentos-topo");
+    async function sincronizarContadorDocumentos() {
         try {
             const resp = await fetch("/api/catalogo");
             if (!resp.ok) return;
-            dadosCatalogo = await resp.json();
-            if (badgeTotalManuais) {
-                badgeTotalManuais.textContent = dadosCatalogo.total_manuais;
+            const dados = await resp.json();
+            if (statusDocumentosTopo && dados && typeof dados.total_manuais === "number") {
+                statusDocumentosTopo.textContent = `📄 ${dados.total_manuais} documentos carregados`;
             }
-            if (textoCatalogoTopo) {
-                textoCatalogoTopo.textContent =
-                    `${dadosCatalogo.total_manuais} manuais ativos · ${dadosCatalogo.total_trechos.toLocaleString("pt-BR")} seções`;
-            }
-        } catch (err) {
-            console.warn("PreparAI: falha ao carregar catálogo de manuais.", err);
+        } catch {
+            // Mantém o valor renderizado no HTML caso a rota falhe
         }
     }
-
-    function escaparHtml(str) {
-        const div = document.createElement("div");
-        div.textContent = str || "";
-        return div.innerHTML;
-    }
-
-    function abrirModalCatalogo() {
-        if (!camadaModal) return;
-
-        const totalManuais = dadosCatalogo.total_manuais || 0;
-        const totalTrechos = (dadosCatalogo.total_trechos || 0).toLocaleString("pt-BR");
-        const totalSiglas  = dadosCatalogo.total_siglas || 0;
-
-        camadaModal.innerHTML = `
-            <div class="modal-backdrop" id="backdrop-catalogo">
-                <div class="modal catalog-modal" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-catalogo">
-                    <div class="modal-head catalog-modal-head">
-                        <div>
-                            <h2 id="titulo-modal-catalogo">Catálogo de Documentos Indexados</h2>
-                            <span class="catalog-subtitle">Acervo oficial ativo do Exército Brasileiro (manuais revogados excluídos)</span>
-                        </div>
-                        <button class="icon-btn" id="btn-fechar-catalogo" aria-label="Fechar catálogo" title="Fechar (Esc)">✕</button>
-                    </div>
-
-                    <div class="catalog-stats-bar">
-                        <div class="catalog-stat-pill">
-                            <strong>${totalManuais}</strong>
-                            <span>Manuais Vigentes</span>
-                        </div>
-                        <div class="catalog-stat-pill">
-                            <strong>${totalTrechos}</strong>
-                            <span>Seções Indexadas</span>
-                        </div>
-                        <div class="catalog-stat-pill">
-                            <strong>${totalSiglas}</strong>
-                            <span>Siglas Mapeadas</span>
-                        </div>
-                    </div>
-
-                    <div class="catalog-search-bar">
-                        <input
-                            type="text"
-                            id="input-busca-catalogo"
-                            placeholder="Filtrar manual por nome, código (ex: EB70-MC-10.375) ou ano..."
-                            autocomplete="off"
-                        />
-                        <span class="catalog-filter-count" id="contador-filtro-catalogo">${totalManuais} exibidos</span>
-                    </div>
-
-                    <div class="catalog-list" id="lista-manuais-catalogo"></div>
-
-                    <div class="modal-foot catalog-modal-foot">
-                        <span class="catalog-foot-hint">Clique em "Consultar" em qualquer manual para direcionar sua pergunta.</span>
-                        <button class="btn primary" id="btn-fechar-catalogo-rodape">Fechar</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        const listaEl    = document.getElementById("lista-manuais-catalogo");
-        const inputBusca = document.getElementById("input-busca-catalogo");
-        const contadorEl = document.getElementById("contador-filtro-catalogo");
-
-        function renderizarItens(filtro = "") {
-            const termo = filtro.trim().toLowerCase();
-            const manuaisFiltrados = (dadosCatalogo.manuais || []).filter(m => {
-                if (!termo) return true;
-                return (
-                    (m.nome_manual || "").toLowerCase().includes(termo) ||
-                    (m.codigo || "").toLowerCase().includes(termo) ||
-                    (m.edicao_completa || "").toLowerCase().includes(termo)
-                );
-            });
-
-            if (contadorEl) {
-                contadorEl.textContent = `${manuaisFiltrados.length} de ${totalManuais}`;
-            }
-
-            if (manuaisFiltrados.length === 0) {
-                listaEl.innerHTML = `
-                    <div class="catalog-empty">
-                        Nenhum manual ativo encontrado para "<strong>${escaparHtml(filtro)}</strong>".
-                    </div>`;
-                return;
-            }
-
-            listaEl.innerHTML = manuaisFiltrados.map(m => `
-                <div class="doc-row catalog-doc-row">
-                    <div class="doc-row-body">
-                        <div class="doc-row-line1">
-                            <span class="doc-row-code">${escaparHtml(m.codigo)}</span>
-                            <span class="doc-row-title"><strong>${escaparHtml(m.nome_manual)}</strong></span>
-                            <span class="status-badge indexado">ATIVO</span>
-                        </div>
-                        <div class="doc-row-line2">
-                            <span class="doc-row-meta">Edição: ${escaparHtml(m.edicao_completa)}</span>
-                            <span class="doc-row-meta">·</span>
-                            <span class="doc-row-meta">${m.capitulos} cap. / ${m.secoes} seções</span>
-                        </div>
-                    </div>
-                    <div class="doc-row-actions">
-                        <button
-                            class="btn-quiet btn-consultar-manual"
-                            data-nome="${escaparHtml(m.nome_manual)}"
-                            data-codigo="${escaparHtml(m.codigo)}"
-                            title="Preencher consulta sobre este manual"
-                        >Consultar →</button>
-                    </div>
-                </div>
-            `).join("");
-
-            listaEl.querySelectorAll(".btn-consultar-manual").forEach(btn => {
-                btn.addEventListener("click", () => {
-                    const nome = btn.getAttribute("data-nome");
-                    const cod  = btn.getAttribute("data-codigo");
-                    fecharModalCatalogo();
-                    input.value = `Segundo o manual ${nome} (${cod}), `;
-                    input.focus();
-                });
-            });
-        }
-
-        renderizarItens("");
-
-        if (inputBusca) {
-            inputBusca.addEventListener("input", (e) => renderizarItens(e.target.value));
-            setTimeout(() => inputBusca.focus(), 40);
-        }
-
-        function fecharModalCatalogo() {
-            camadaModal.innerHTML = "";
-            document.removeEventListener("keydown", onEscModal);
-        }
-
-        function onEscModal(e) {
-            if (e.key === "Escape") fecharModalCatalogo();
-        }
-
-        document.addEventListener("keydown", onEscModal);
-        document.getElementById("btn-fechar-catalogo")?.addEventListener("click", fecharModalCatalogo);
-        document.getElementById("btn-fechar-catalogo-rodape")?.addEventListener("click", fecharModalCatalogo);
-        document.getElementById("backdrop-catalogo")?.addEventListener("click", (e) => {
-            if (e.target.id === "backdrop-catalogo") fecharModalCatalogo();
-        });
-    }
-
-    if (btnCatalogo) {
-        btnCatalogo.addEventListener("click", abrirModalCatalogo);
-    }
-    if (btnCatalogoTopo) {
-        btnCatalogoTopo.addEventListener("click", abrirModalCatalogo);
-    }
-
-    carregarCatalogo();
+    sincronizarContadorDocumentos();
 });

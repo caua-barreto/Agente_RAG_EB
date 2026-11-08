@@ -55,7 +55,7 @@ O Backend é orquestrado por **FastAPI**, servindo rotas de forma assíncrona. O
 
 ##  Roadmap e Próximos Passos
 
-O projeto está em sua **fase base V1.5** e serve como prova de conceito e avaliação inicial pelos professores. As próximas fases de desenvolvimento incluem:
+O projeto está em sua **versão V2.0 (MVP Consolidado)** e serve como prova de conceito e avaliação inicial pelos professores. As próximas fases de desenvolvimento incluem:
 
 * [ ] **Migração de Plataforma:** Integração como aplicação Web escalável e/ou Aplicativo Mobile.
 * [ ] **Bancos de Dados Relacionais:** 
