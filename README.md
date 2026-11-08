@@ -132,7 +132,7 @@ python main.py
 
 ---
 
-## ⚠️ Limitações Atuais do Projeto (MVP V2.0)
+## ⚠️ Limitações Atuais do Projeto (MVP V.2.0)
 
 Por decisão estratégica de engenharia voltada a entregar um MVP local extremamente rápido, leve e funcional, a versão atual possui limitações conhecidas e mapeadas:
 
@@ -160,8 +160,8 @@ Projeto idealizado e desenvolvido na disciplina de **Introdução a Projetos de 
 
 | Integrante | Função / Cargo | Contato Profissional |
 | :--- | :--- | :--- |
+| **Cauã Barreto** | 🧠 **AI Engineering** | [🔗 LinkedIn](https://www.linkedin.com/in/caua-fbarreto-/) |
 | **Ana Luíza T.** | 🎖️ **CEO** (*Chief Executive Officer*) | [🔗 LinkedIn](https://www.linkedin.com/in/ana-luiza-tavares-castro-9639a4386/) |
 | **João P. Sabiá** | 🚀 **CTO** (*Chief Technology Officer*) | [🔗 LinkedIn](https://www.linkedin.com/in/jo%C3%A3o-pedroti-0a3a62360/) |
-| **Cauã Barreto** | 🧠 **AI Engineering** | [🔗 LinkedIn](https://www.linkedin.com/in/caua-fbarreto-/) |
 | **Sidney Lima** | 💻 **Software Developer** | [🔗 LinkedIn](https://www.linkedin.com/in/sidneylimajr/) |
 | **Danielly Satyro** | 📢 **Marketing** | [🔗 LinkedIn](https://www.linkedin.com/in/danielly-satyro-a0849239b/) |
