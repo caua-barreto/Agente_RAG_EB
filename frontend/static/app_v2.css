@@ -2904,3 +2904,215 @@ textarea {
   font-weight: 600;
   color: var(--olive, #4a5e2a);
 }
+
+/* ===========================================================================
+   Catálogo Visual de Documentos Indexados (Manuais Ativos)
+   =========================================================================== */
+
+.sb-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sb-btn-catalog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--olive-light, #f0f4e8);
+  border: 1px solid var(--olive-border, #c5d097);
+  color: var(--olive, #4a5e2a);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.sb-btn-catalog:hover {
+  background: var(--olive, #4a5e2a);
+  border-color: var(--olive, #4a5e2a);
+  color: #ffffff;
+}
+
+.sb-catalog-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: #ffffff;
+  color: var(--olive, #4a5e2a);
+  border: 1px solid var(--olive-border, #c5d097);
+  border-radius: 10px;
+  padding: 1px 7px;
+  line-height: 1.4;
+}
+
+.sb-btn-catalog:hover .sb-catalog-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.topbar-catalog-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--olive-light, #f0f4e8);
+  border: 1px solid var(--olive-border, #c5d097);
+  color: var(--olive, #4a5e2a);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.topbar-catalog-pill:hover {
+  background: var(--olive, #4a5e2a);
+  color: #ffffff;
+  border-color: var(--olive, #4a5e2a);
+}
+
+.topbar-catalog-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #15803d;
+  box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.2);
+}
+
+.topbar-catalog-pill:hover .topbar-catalog-dot {
+  background: #bbf7d0;
+}
+
+.modal.catalog-modal {
+  max-width: 740px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.catalog-modal-head {
+  background: var(--surface, #f7f8f4);
+  padding: 16px 20px;
+}
+
+.catalog-subtitle {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted, #7a8060);
+  margin-top: 3px;
+}
+
+.catalog-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--olive-light, #f0f4e8);
+  border-bottom: 1px solid var(--olive-border, #c5d097);
+}
+
+.catalog-stat-pill {
+  background: #ffffff;
+  border: 1px solid var(--olive-border, #c5d097);
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.catalog-stat-pill strong {
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--olive, #4a5e2a);
+  line-height: 1.2;
+}
+
+.catalog-stat-pill span {
+  font-size: 10px;
+  color: var(--text-muted, #7a8060);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+.catalog-search-bar {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+}
+
+.catalog-search-bar input {
+  flex: 1;
+  font-size: 12.5px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+
+.catalog-search-bar input:focus {
+  border-color: var(--olive, #4a5e2a);
+  background: #ffffff;
+}
+
+.catalog-filter-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.catalog-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 220px;
+  max-height: 48vh;
+  background: var(--surface, #f7f8f4);
+}
+
+.catalog-doc-row {
+  border-left: 3px solid var(--olive, #4a5e2a);
+}
+
+.catalog-doc-row:hover {
+  border-color: var(--olive-border, #c5d097);
+  border-left-color: var(--olive, #4a5e2a);
+  box-shadow: 0 2px 6px rgba(74, 94, 42, 0.08);
+}
+
+.catalog-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.catalog-modal-foot {
+  justify-content: space-between;
+  background: #ffffff;
+}
+
+.catalog-foot-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+

@@ -2,17 +2,11 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-Pipeline_executed.ipynb
-
-# Pastas geradas pela extração de imagens
-Imagens/
-COMANDO DE OPERAÇÕES TERRESTRES*/
-Manual de Campanha*/
 
 # Chaves de API e Segredos
 .env
 
-# Arquivos Originais e Processados (Ignora o conteúdo, mas envia a pasta vazia)
+# Arquivos Originais e Processados (Ignora o conteúdo pesado, mas envia a pasta vazia)
 Arquivos/*
 !Arquivos/.gitkeep
 Gerados/*

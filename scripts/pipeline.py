@@ -4,24 +4,20 @@ pipeline.py — PreparAI
 Extrai o conteúdo de manuais militares (padrão de Manual de Campanha do EB) em PDF
 e os exporta como XML estruturado para uso pelo motor de busca BM25 do assistente.
 
-Integra-se automaticamente com o catálogo gerado por `webscraping/webscraping.py`
-(`webscraping/Coleta/manuais_campanha.json`) quando disponível, enriquecendo os
-metadados do XML.
+Características:
+  - Extração 100% vetorial/nativa de texto (sem OCR e sem exportação de imagens).
+  - Cache incremental automático: pula PDFs que já possuem XML gerado em `Gerados/`.
+  - Extração enriquecida de metadados (Nome do Manual, Código EB, Edição e Ano).
+  - Recorte cirúrgico de texto entre cabeçalhos de seção na mesma página.
 
 Uso direto:
-    python scripts/pipeline.py
-    python scripts/pipeline.py --sem-imagens
-    python scripts/pipeline.py --ocr          # ativa fallback OCR p/ páginas escaneadas
-
-Os PDFs vigentes devem estar em:  Arquivos/
-Os XMLs serão gerados em:         Gerados/
+    python scripts/pipeline.py            # processa apenas PDFs novos (cache incremental)
+    python scripts/pipeline.py --forcar   # reprocessa todos os PDFs do zero
 """
 
 import argparse
-import io
 import json
 import re
-import shutil
 import sys
 import xml.etree.ElementTree as _stdlib_et
 from pathlib import Path
@@ -30,7 +26,6 @@ from pathlib import Path
 _RAIZ = Path(__file__).resolve().parent.parent
 PASTA_ARQUIVOS = _RAIZ / "Arquivos"
 PASTA_GERADOS = _RAIZ / "Gerados"
-PASTA_IMAGENS = _RAIZ / "Imagens"
 ARQUIVO_CATALOGO_BDEX = _RAIZ / "webscraping" / "Coleta" / "manuais_campanha.json"
 
 # Permite importar pacotes da .venv local caso o script seja chamado pelo python do sistema
@@ -53,9 +48,6 @@ except Exception:
             tp = self._page.get_textpage()
             texto = tp.get_text_range()
             return texto.replace("\r\n", "\n").replace("\r", "\n")
-
-        def get_images(self, full: bool = True):
-            return []
 
     class _PdfiumDocAdapter:
         def __init__(self, path: str):
@@ -89,17 +81,13 @@ except Exception:
     etree = _stdlib_et
     _USA_LXML = False
 
-# ── Configuração de OCR Fallback (desativado por padrão por performance) ───
-USAR_OCR_FALLBACK = False
-_OCR_AVISADO = False
-
 
 # =============================================================================
-# UTILIDADES GERAIS E EXTRAÇÃO DE TEXTO (COM FALLBACK OCR OPCIONAL)
+# UTILIDADES GERAIS E CACHE INCREMENTAL
 # =============================================================================
 
 def sanitizar(nome: str, max_len: int = 200) -> str:
-    """Remove caracteres inválidos para nomes de arquivo/pasta e trunca."""
+    """Remove caracteres inválidos para nomes de arquivo e trunca."""
     nome = re.sub(r'[/\\:*?"<>|]', "", nome).strip()
     return nome[:max_len]
 
@@ -123,6 +111,36 @@ def carregar_catalogo_bdex() -> dict[str, dict]:
         return {}
 
 
+def mapear_xmls_existentes(pasta_saida: Path = PASTA_GERADOS) -> dict[str, Path]:
+    """
+    Lê os metadados dos XMLs já gerados em `Gerados/` e retorna um dicionário
+    mapeando tanto o nome do PDF original quanto o título/código do manual
+    para o caminho do XML, evitando retrabalho e duplicatas.
+    """
+    processados: dict[str, Path] = {}
+    if not pasta_saida.exists():
+        return processados
+
+    for xml_path in pasta_saida.glob("*.xml"):
+        if xml_path.stat().st_size == 0:
+            continue
+        try:
+            arvore = etree.parse(str(xml_path))
+            raiz = arvore.getroot()
+            no_arq = raiz.find(".//metadados/arquivo")
+            no_ed = raiz.find(".//metadados/edicao")
+            no_tit = raiz.find(".//metadados/titulo")
+            # Garante que o XML possui os metadados completos da estrutura atual
+            if no_arq is not None and no_arq.text and no_ed is not None:
+                processados[no_arq.text.strip()] = xml_path
+                if no_tit is not None and no_tit.text:
+                    processados[f"TITULO::{no_tit.text.strip()}"] = xml_path
+        except Exception:
+            continue
+
+    return processados
+
+
 def descobrir_pdfs(pasta: Path = PASTA_ARQUIVOS) -> dict[str, Path]:
     """
     Varre a pasta de entrada (ignorando a subpasta Revogados/) e retorna
@@ -136,54 +154,72 @@ def descobrir_pdfs(pasta: Path = PASTA_ARQUIVOS) -> dict[str, Path]:
     return pdfs
 
 
-def _extrair_texto_pagina_com_ocr_opcional(pagina) -> str:
-    """
-    Extrai o texto nativo da página via PyMuPDF / PDFium.
-    Se o texto vier vazio (página puramente escaneada) e `USAR_OCR_FALLBACK`
-    estiver ativo (`--ocr`), tenta extrair via pytesseract + Pillow caso o
-    binário `tesseract` esteja instalado no sistema operacional.
-    """
-    global _OCR_AVISADO
-    texto = pagina.get_text("text")
-    if texto.strip() or not USAR_OCR_FALLBACK:
-        return texto
-
-    if shutil.which("tesseract") is None:
-        if not _OCR_AVISADO:
-            print(
-                "  ⚠️  Aviso OCR: página sem camada de texto, mas o binário 'tesseract' "
-                "não está instalado no sistema (instale 'tesseract-ocr' e 'tesseract-ocr-por')."
-            )
-            _OCR_AVISADO = True
-        return texto
-
-    try:
-        import pytesseract
-        from PIL import Image
-
-        if hasattr(pagina, "get_pixmap"):
-            pix = pagina.get_pixmap(dpi=250)
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
-            return pytesseract.image_to_string(img, lang="por")
-    except Exception as e:
-        if not _OCR_AVISADO:
-            print(f"  ⚠️  Aviso OCR: falha ao executar pytesseract ({e}).")
-            _OCR_AVISADO = True
-    return texto
-
-
 # =============================================================================
-# ETAPA 1 — EXTRAÇÃO DE TÍTULO
+# ETAPA 1 — EXTRAÇÃO DE METADADOS DA CAPA (TÍTULO, EDIÇÃO, ANO E CÓDIGO)
 # =============================================================================
 
-def extrair_titulo_pdf(caminho_pdf: Path, meta_bdex: dict | None = None) -> str:
+_TERMOS_INSTITUCIONAIS_CAPA = (
+    "MINISTÉRIO DA DEFESA",
+    "MINISTERIO DA DEFESA",
+    "EXÉRCITO BRASILEIRO",
+    "EXERCITO BRASILEIRO",
+    "COMANDO DE OPERAÇÕES TERRESTRES",
+    "COMANDO DE OPERACOES TERRESTRES",
+    "ESTADO-MAIOR DO EXÉRCITO",
+    "ESTADO-MAIOR DO EXERCITO",
+    "SECRETARIA-GERAL DO EXÉRCITO",
+    "DEPARTAMENTO DE EDUCAÇÃO E CULTURA DO EXÉRCITO",
+    "COMANDO LOGÍSTICO",
+    "MANUAL DE CAMPANHA",
+)
+
+
+def _formatar_nome_manual(texto: str) -> str:
+    """Formata o nome do manual em Title Case preservando preposições em minúsculas."""
+    if not texto.isupper():
+        return texto
+    preposicoes = {"de", "da", "do", "das", "dos", "e", "em", "na", "no", "nas", "nos", "para", "com", "a", "o", "as", "os"}
+    palavras = texto.title().split()
+    resultado = []
+    for idx, p in enumerate(palavras):
+        if idx > 0 and p.lower() in preposicoes:
+            resultado.append(p.lower())
+        else:
+            resultado.append(p)
+    return " ".join(resultado)
+
+
+def _extrair_codigo_eb(texto: str) -> str:
+    """Extrai e padroniza códigos de manuais (ex: EB70-MC-10.375, C-20-10, MC 4.55)."""
+    m_eb = re.search(
+        r"\b(EB\d{2})\s*[-–_]?\s*([A-Z]{2})\s*[-–_]?\s*(\d{2})[\.\-_]?(\d{3})\b",
+        texto,
+        re.IGNORECASE,
+    )
+    if m_eb:
+        return f"{m_eb.group(1).upper()}-{m_eb.group(2).upper()}-{m_eb.group(3)}.{m_eb.group(4)}"
+    m_c = re.search(r"\bC\s*[-–]\s*(\d+)\s*[-–]\s*(\d+)\b", texto, re.IGNORECASE)
+    if m_c:
+        return f"C-{m_c.group(1)}-{m_c.group(2)}"
+    m_mc = re.search(r"\bMC\s*[-–_]?\s*(\d+[\.\-]\d+)\b", texto, re.IGNORECASE)
+    if m_mc:
+        return f"MC {m_mc.group(1).replace('-', '.')}"
+    return ""
+
+
+def extrair_metadados_capa(caminho_pdf: Path, meta_bdex: dict | None = None) -> dict[str, str]:
     """
-    Extrai o título do manual a partir das primeiras linhas da página 1.
-    Os manuais do EB seguem o padrão: linhas 4–7 contêm o título completo.
-    Usa o título catalogado na BDEx como fallback caso a página 1 esteja sem texto.
+    Extrai os metadados estruturados do manual a partir da capa (página 1),
+    da última página e do catálogo da BDEx (se disponível):
+      - titulo: string completa para o nome do arquivo XML
+      - nome_manual: nome limpo do manual (ex: 'Treinamento Físico Militar')
+      - codigo: código oficial EB (ex: 'EB70-MC-10.375')
+      - edicao: edição normalizada (ex: '5ª Ed.')
+      - ano: ano de publicação (ex: '2021')
     """
     pdf = fitz.open(str(caminho_pdf))
-    texto_pagina_1 = _extrair_texto_pagina_com_ocr_opcional(pdf[0]) if len(pdf) > 0 else ""
+    texto_pagina_1 = pdf[0].get_text("text") if len(pdf) > 0 else ""
+    texto_ultima_pag = pdf[len(pdf) - 1].get_text("text") if len(pdf) > 1 else ""
     pdf.close()
 
     linhas_brutas = [
@@ -192,30 +228,81 @@ def extrair_titulo_pdf(caminho_pdf: Path, meta_bdex: dict | None = None) -> str:
         if re.sub(r"\s+", " ", l).strip()
     ]
 
-    # Une número de edição quebrado de seu ordinal (ex: "1" + "a Edição" -> "1a Edição")
+    # Une número de edição quebrado de seu ordinal (ex: "1" + "a Edição" ou "1" + "aEdição")
     linhas = []
     i = 0
     while i < len(linhas_brutas):
         atual = linhas_brutas[i]
-        if re.match(r"^\d+$", atual) and i + 1 < len(linhas_brutas) and re.match(r"^[aªº]\b", linhas_brutas[i + 1], re.IGNORECASE):
+        if (
+            re.match(r"^\d+$", atual)
+            and i + 1 < len(linhas_brutas)
+            and re.match(r"^[aªº]\s*(Edi[çc][ãa]o)?\b", linhas_brutas[i + 1], re.IGNORECASE)
+        ):
             linhas.append(f"{atual}{linhas_brutas[i + 1]}")
             i += 2
         else:
             linhas.append(atual)
             i += 1
 
-    if len(linhas) >= 7:
-        titulo = " | ".join(linhas[3:7])
-    elif len(linhas) >= 4:
-        titulo = " ".join(linhas[3:])
-    elif linhas:
-        titulo = " | ".join(linhas)
-    elif meta_bdex and meta_bdex.get("titulo"):
-        titulo = meta_bdex["titulo"]
-    else:
-        titulo = caminho_pdf.stem
+    texto_capa_unido = "\n".join(linhas)
 
-    return re.sub(r"\s{2,}", " ", titulo).strip()
+    # 1. Código do manual (capa -> nome do arquivo PDF)
+    codigo = _extrair_codigo_eb(texto_capa_unido) or _extrair_codigo_eb(caminho_pdf.stem)
+
+    # 2. Edição (ex: "4ª Edição" -> "4ª Ed.", "1a Edição" -> "1ª Ed.")
+    m_ed = re.search(r"\b(\d+)\s*[ªºa]?\s*Edi[çc][ãa]o\b", texto_capa_unido, re.IGNORECASE)
+    if m_ed:
+        edicao = f"{m_ed.group(1)}ª Ed."
+    elif re.search(r"Edi[çc][ãa]o\s+Experimental", texto_capa_unido, re.IGNORECASE):
+        edicao = "Ed. Experimental"
+    else:
+        edicao = "Ed. Única"
+
+    # 3. Ano de publicação (capa -> catálogo BDEx -> última página)
+    anos_capa = re.findall(r"\b(19\d{2}|20\d{2})\b", texto_capa_unido)
+    if anos_capa:
+        ano = anos_capa[-1]
+    elif meta_bdex and meta_bdex.get("data") and str(meta_bdex["data"])[:4].isdigit():
+        ano = str(meta_bdex["data"])[:4]
+    else:
+        anos_fim = re.findall(r"\b(19\d{2}|20\d{2})\b", texto_ultima_pag)
+        ano = anos_fim[-1] if anos_fim else "S/D"
+
+    # 4. Nome limpo do Manual (prioriza título curado do catálogo BDEx quando disponível)
+    if meta_bdex and meta_bdex.get("titulo") and meta_bdex["titulo"].strip():
+        nome_manual = _formatar_nome_manual(meta_bdex["titulo"].strip().upper())
+    else:
+        candidatos_nome = []
+        for l in linhas:
+            l_up = l.upper()
+            if any(termo in l_up for termo in _TERMOS_INSTITUCIONAIS_CAPA):
+                continue
+            if _extrair_codigo_eb(l_up):
+                continue
+            if re.search(r"\b\d*\s*[ªºa]?\s*Edi[çc][ãa]o\b", l, re.IGNORECASE):
+                continue
+            if re.match(r"^(19\d{2}|20\d{2}|[-–—_\s]+)$", l):
+                continue
+            candidatos_nome.append(l)
+
+        if candidatos_nome:
+            nome_manual = _formatar_nome_manual(" ".join(candidatos_nome))
+        else:
+            nome_manual = _formatar_nome_manual(caminho_pdf.stem)
+
+    # 5. Título completo estruturado e livre de colisão para o XML
+    if codigo:
+        titulo_completo = f"{codigo} | {nome_manual} | {edicao} ({ano})"
+    else:
+        titulo_completo = f"{nome_manual} | {edicao} ({ano})"
+
+    return {
+        "titulo": titulo_completo,
+        "nome_manual": nome_manual,
+        "codigo": codigo,
+        "edicao": edicao,
+        "ano": ano,
+    }
 
 
 # =============================================================================
@@ -243,7 +330,7 @@ def extrair_indice_pdf(caminho_pdf: Path) -> str:
     capturando = False
 
     for pagina in pdf:
-        texto = _extrair_texto_pagina_com_ocr_opcional(pagina)
+        texto = pagina.get_text("text")
         if not capturando:
             for marcador in ("NDICE DE ASSUNTOS", "SUMÁRIO", "SUMARIO"):
                 if marcador in texto.upper():
@@ -375,7 +462,6 @@ def parsear_indice(indice_texto: str) -> list[dict]:
                 "num": f"Anexo {letra}",
                 "letra": letra,
                 "titulo": titulo,
-                # Nos manuais EB, o Anexo A começa na página 'A-1', Anexo B em 'B-1', etc.
                 "pagina": pag_m.group(1) if pag_m else f"{letra}-1",
             })
             continue
@@ -387,7 +473,6 @@ def parsear_indice(indice_texto: str) -> list[dict]:
                 pag_m = re.search(r"([A-Z]?-\d+|\d+-\d+)\s*$", linha)
                 titulo_esp = "Prefácio" if "PREF" in prefixo else ("Glossário" if "GLOSS" in prefixo else "Referências")
                 chave_esp = f"@{titulo_esp.upper()}"
-                # Evita duplicar seções especiais caso o início do Prefácio tenha sido capturado após o sumário
                 if not any(e["tipo"] == "especial" and e["titulo"] == titulo_esp for e in estrutura):
                     estrutura.append({
                         "tipo": "especial",
@@ -408,13 +493,11 @@ def mapear_paginas(caminho_pdf: Path) -> dict[str, int]:
     """
     Lê os rodapés/cabeçalhos de numeração do tipo '1-5', '2-12', 'A-1', 'B-3'
     de cada página e retorna {numeracao_manual: indice_pagina_pdf}.
-    Também mapeia marcadores especiais (@PREFÁCIO, @GLOSSÁRIO, @REFERÊNCIAS)
-    e cabeçalhos de ANEXO caso não possuam rodapé padrão.
     """
     pdf = fitz.open(str(caminho_pdf))
     mapa: dict[str, int] = {}
     for i, pagina in enumerate(pdf):
-        texto = _extrair_texto_pagina_com_ocr_opcional(pagina)
+        texto = pagina.get_text("text")
         linhas = [l.strip() for l in texto.splitlines() if l.strip()]
 
         # 1. Procura numeração padrão (ex: 1-1, 3-15, A-1, B-2) no rodapé/topo
@@ -445,7 +528,6 @@ def _pag_range(
     """
     Calcula o intervalo de páginas e identifica o próximo item estrutural
     para delimitar onde a seção atual termina.
-    Retorna (pag_inicio, pag_proxima_secao, proximo_item).
     """
     item = estrutura[idx]
     chave_pag = item.get("pagina")
@@ -484,7 +566,7 @@ def _padrao_inicio_item(item: dict) -> re.Pattern | None:
 def _limpar_texto(texto: str) -> str:
     """
     Remove artefatos comuns dos PDFs militares e caracteres de controle inválidos em XML 1.0:
-    - Corrige hífens de quebra de linha codificados como \ufffe ou \xad (ex: coluna\ufffebase -> coluna-base)
+    - Corrige hífens de quebra de linha codificados como \ufffe ou \xad
     - Remove caracteres de controle proibidos na especificação XML 1.0
     - Remove códigos de manual (EB70-MC-10.xxx, EB20-MC-10.xxx)
     - Remove numerações de página isoladas (1-5, 2-12, A-1)
@@ -505,13 +587,8 @@ def _extrair_texto_item(
     mapa_paginas: dict[str, int],
 ) -> str | None:
     """
-    Extrai o texto exato de uma seção, anexo ou seção especial:
-    - Quando várias seções dividem a mesma página (ex: 1.1, 1.2, 1.3 na pág 1-1)
-      ou quando uma seção termina no meio da página onde a próxima começa,
-      recorta o texto exatamente entre o cabeçalho da seção atual e o cabeçalho
-      da próxima seção.
-    - Caso o cabeçalho não seja localizado via Regex (variação tipográfica),
-      faz fallback seguro para o intervalo de páginas.
+    Extrai o texto exato de uma seção, anexo ou seção especial, recortando
+    entre o cabeçalho do item atual e o cabeçalho do próximo item.
     """
     pag_inicio, pag_prox, prox_item = _pag_range(idx, estrutura, mapa_paginas, len(pdf))
     if pag_inicio is None:
@@ -519,10 +596,7 @@ def _extrair_texto_item(
 
     item_atual = estrutura[idx]
 
-    # Determina até qual página ler para buscar o fim da seção atual
     if pag_prox is not None:
-        # Lemos até pag_prox (inclusive) para capturar o final da seção atual
-        # caso ela invada o topo da página onde começa a próxima seção
         pag_leitura_fim = min(pag_prox + 1, len(pdf))
         pag_fallback_fim = max(pag_inicio + 1, min(pag_prox, len(pdf)))
     else:
@@ -530,12 +604,12 @@ def _extrair_texto_item(
         pag_fallback_fim = pag_leitura_fim
 
     textos_por_pagina = [
-        _extrair_texto_pagina_com_ocr_opcional(pdf[p])
+        pdf[p].get_text("text")
         for p in range(pag_inicio, pag_leitura_fim)
     ]
     texto_completo = "\n".join(textos_por_pagina)
 
-    # 1. Recorta o início a partir do cabeçalho da seção atual (ex: "1.2 CONCEITO...")
+    # 1. Recorta o início a partir do cabeçalho da seção atual
     padrao_atual = _padrao_inicio_item(item_atual)
     pos_inicio = 0
     if padrao_atual is not None:
@@ -545,14 +619,13 @@ def _extrair_texto_item(
             if texto_completo[pos_inicio] == "\n":
                 pos_inicio += 1
 
-    # 2. Recorta o fim exatamente antes do cabeçalho da próxima seção (ex: "1.3 OBJETIVOS...")
+    # 2. Recorta o fim exatamente antes do cabeçalho da próxima seção
     texto_a_partir_inicio = texto_completo[pos_inicio:]
     cortou_no_proximo = False
 
     if prox_item is not None:
         padrao_prox = _padrao_inicio_item(prox_item)
         if padrao_prox is not None:
-            # Pula os primeiros caracteres do próprio título atual para buscar o próximo
             offset_busca = min(len(texto_a_partir_inicio), 25)
             m_fim = padrao_prox.search(texto_a_partir_inicio[offset_busca:])
             if m_fim:
@@ -560,8 +633,6 @@ def _extrair_texto_item(
                 texto_a_partir_inicio = texto_a_partir_inicio[:pos_fim]
                 cortou_no_proximo = True
 
-    # Se não encontrou o cabeçalho da próxima seção na página pag_prox e pag_prox > pag_inicio,
-    # descarta o texto da página pag_prox para não vazar a próxima seção inteira
     if not cortou_no_proximo and pag_prox is not None and pag_prox > pag_inicio:
         texto_fallback = "\n".join(textos_por_pagina[: pag_fallback_fim - pag_inicio])
         if pos_inicio < len(texto_fallback):
@@ -573,86 +644,33 @@ def _extrair_texto_item(
 
 
 # =============================================================================
-# ETAPA 4 — EXPORTAÇÃO DE IMAGENS
-# =============================================================================
-
-def exportar_imagens(
-    caminho_pdf: Path,
-    titulo_doc: str,
-    estrutura: list[dict],
-    mapa_paginas: dict[str, int],
-    base_dir: Path = PASTA_IMAGENS,
-) -> tuple[Path, int]:
-    """
-    Exporta as imagens embutidas no PDF para pastas organizadas por seção.
-    Retorna (pasta_raiz_do_documento, total_de_imagens_salvas).
-    """
-    pdf = fitz.open(str(caminho_pdf))
-    pasta_doc = base_dir / sanitizar(titulo_doc)
-    pasta_doc.mkdir(parents=True, exist_ok=True)
-
-    cap_pasta: Path | None = None
-    total_imgs = 0
-
-    for idx, item in enumerate(estrutura):
-        if item["tipo"] == "capitulo":
-            nome = sanitizar(f"CAPÍTULO {item['num']} - {item['titulo']}")
-            cap_pasta = pasta_doc / nome
-            cap_pasta.mkdir(parents=True, exist_ok=True)
-
-        elif item["tipo"] == "secao":
-            nome = sanitizar(f"{item['num']} {item['titulo']}")
-            pasta_secao = (cap_pasta / nome) if cap_pasta else (pasta_doc / nome)
-            pasta_secao.mkdir(parents=True, exist_ok=True)
-
-            pag_i, pag_prox, _ = _pag_range(idx, estrutura, mapa_paginas, len(pdf))
-            if pag_i is not None and hasattr(fitz, "Pixmap"):
-                pag_f = max(pag_i + 1, pag_prox) if pag_prox is not None else min(pag_i + 15, len(pdf))
-                for p in range(pag_i, min(pag_f, len(pdf))):
-                    for j, img_info in enumerate(pdf[p].get_images(full=True)):
-                        xref = img_info[0]
-                        try:
-                            pix = fitz.Pixmap(pdf, xref)
-                            if pix.n > 4:  # CMYK → RGB
-                                pix = fitz.Pixmap(fitz.csRGB, pix)
-                            img_path = pasta_secao / f"pagina_{p+1}_img_{j+1}.png"
-                            pix.save(str(img_path))
-                            total_imgs += 1
-                        except Exception:
-                            pass  # ignora imagens corrompidas
-
-        elif item["tipo"] in ("anexo", "especial"):
-            (pasta_doc / sanitizar(item["titulo"])).mkdir(parents=True, exist_ok=True)
-
-    pdf.close()
-    return pasta_doc, total_imgs
-
-
-# =============================================================================
-# ETAPA 5 — EXPORTAÇÃO PARA XML
+# ETAPA 4 — EXPORTAÇÃO PARA XML
 # =============================================================================
 
 def exportar_para_xml(
     caminho_pdf: Path,
-    titulo_doc: str,
+    meta_capa: dict[str, str],
     estrutura: list[dict],
     mapa_paginas: dict[str, int],
     pasta_saida: Path,
     meta_bdex: dict | None = None,
 ) -> Path:
     """
-    Converte o conteúdo do manual para um arquivo XML estruturado.
+    Converte o conteúdo do manual para um arquivo XML estruturado com metadados
+    de nome, código, edição e ano para citações oficiais.
     """
     pdf = fitz.open(str(caminho_pdf))
     root = etree.Element("documento")
 
-    # Metadados
+    # Metadados enriquecidos
     meta = etree.SubElement(root, "metadados")
-    etree.SubElement(meta, "titulo").text = titulo_doc
+    etree.SubElement(meta, "titulo").text = meta_capa["titulo"]
+    etree.SubElement(meta, "nome_manual").text = meta_capa["nome_manual"]
+    etree.SubElement(meta, "codigo").text = meta_capa["codigo"]
+    etree.SubElement(meta, "edicao").text = meta_capa["edicao"]
+    etree.SubElement(meta, "ano").text = meta_capa["ano"]
     etree.SubElement(meta, "arquivo").text = Path(caminho_pdf).name
     if meta_bdex:
-        if meta_bdex.get("data"):
-            etree.SubElement(meta, "data").text = str(meta_bdex["data"])
         if meta_bdex.get("autor"):
             etree.SubElement(meta, "autor").text = str(meta_bdex["autor"])
         if meta_bdex.get("handle"):
@@ -707,7 +725,7 @@ def exportar_para_xml(
     pdf.close()
 
     pasta_saida.mkdir(parents=True, exist_ok=True)
-    nome_arquivo = sanitizar(titulo_doc) + ".xml"
+    nome_arquivo = sanitizar(meta_capa["titulo"]) + ".xml"
     caminho_xml = pasta_saida / nome_arquivo
 
     arvore = etree.ElementTree(root)
@@ -735,24 +753,25 @@ def exportar_para_xml(
 def processar_pdf(
     caminho_pdf: Path,
     pasta_saida: Path = PASTA_GERADOS,
-    extrair_imgs: bool = True,
     catalogo_bdex: dict[str, dict] | None = None,
 ) -> dict:
     """
-    Executa todas as etapas da pipeline em um único PDF:
-      1. Extrai título (com fallback para catálogo BDEx)
+    Executa as etapas da pipeline em um único PDF:
+      1. Extrai metadados da capa (título, nome, código, edição e ano)
       2. Extrai e parseia o índice
       3. Mapeia numeração de páginas (incluindo anexos A-1, B-1)
-      4. Exporta imagens por seção (opcional)
-      5. Exporta XML estruturado com recorte exato por seção
+      4. Exporta XML estruturado com recorte exato por seção
     """
     print(f"\n{'='*60}")
     print(f"📄 Processando: {caminho_pdf.name}")
     print(f"{'='*60}")
 
     meta_bdex = (catalogo_bdex or {}).get(caminho_pdf.name)
-    titulo = extrair_titulo_pdf(caminho_pdf, meta_bdex=meta_bdex)
-    print(f"  📌 Título: {titulo}")
+    meta_capa = extrair_metadados_capa(caminho_pdf, meta_bdex=meta_bdex)
+    print(
+        f"  📌 Manual : {meta_capa['nome_manual']} "
+        f"| Edição: {meta_capa['edicao']} ({meta_capa['ano']})"
+    )
 
     indice = extrair_indice_pdf(caminho_pdf)
     if not indice.strip():
@@ -767,15 +786,12 @@ def processar_pdf(
     print(f"  📋 {cap_count} capítulo(s), {sec_count} seção(ões)")
     print(f"  🗺️  {len(mapa)} página(s) mapeada(s)")
 
-    n_imgs = 0
-    if extrair_imgs:
-        pasta_imgs, n_imgs = exportar_imagens(
-            caminho_pdf, titulo, estrutura, mapa, PASTA_IMAGENS
-        )
-        print(f"  🖼️  {n_imgs} imagem(ns) exportada(s) → {pasta_imgs}")
+    if not mapa:
+        print("  ⚠️  Nenhuma página mapeada (PDF incompleto ou fora do padrão) — ignorado.")
+        return {"arquivo": caminho_pdf.name, "status": "sem_paginas"}
 
     caminho_xml = exportar_para_xml(
-        caminho_pdf, titulo, estrutura, mapa, pasta_saida, meta_bdex=meta_bdex
+        caminho_pdf, meta_capa, estrutura, mapa, pasta_saida, meta_bdex=meta_bdex
     )
     print(
         f"  ✅ XML gerado: {caminho_xml.name}  "
@@ -784,11 +800,13 @@ def processar_pdf(
 
     return {
         "arquivo": caminho_pdf.name,
-        "titulo": titulo,
+        "titulo": meta_capa["titulo"],
+        "nome_manual": meta_capa["nome_manual"],
+        "edicao": meta_capa["edicao"],
+        "ano": meta_capa["ano"],
         "capitulos": cap_count,
         "secoes": sec_count,
         "paginas": len(mapa),
-        "imagens": n_imgs,
         "xml": str(caminho_xml),
         "status": "ok",
     }
@@ -799,23 +817,15 @@ def processar_pdf(
 # =============================================================================
 
 def main():
-    global USAR_OCR_FALLBACK
-
     parser = argparse.ArgumentParser(
         description="Pipeline de extração de Manuais de Campanha (PDF para XML)."
     )
     parser.add_argument(
-        "--sem-imagens",
+        "--forcar",
         action="store_true",
-        help="Pula a etapa de exportação de imagens PNG para acelerar o processamento.",
-    )
-    parser.add_argument(
-        "--ocr",
-        action="store_true",
-        help="Ativa fallback de OCR (pytesseract) para páginas escaneadas sem texto nativo.",
+        help="Força o reprocessamento de todos os PDFs, ignorando o cache incremental de XMLs.",
     )
     args, _ = parser.parse_known_args()
-    USAR_OCR_FALLBACK = args.ocr
 
     print("=" * 60)
     print("  PREPARAI — PIPELINE DE EXTRAÇÃO DE MANUAIS")
@@ -830,15 +840,39 @@ def main():
         print("Nenhum PDF encontrado. Execute 'python webscraping/webscraping.py' ou coloque os arquivos em 'Arquivos/'.")
         return
 
+    xmls_existentes = {} if args.forcar else mapear_xmls_existentes(PASTA_GERADOS)
+
     resultados = []
+    pulados = 0
     for nome, caminho in pdfs.items():
+        if caminho.name in xmls_existentes:
+            xml_ja_pronto = xmls_existentes[caminho.name]
+            print(f"⏭️  Pulando '{caminho.name}' — já processado em '{xml_ja_pronto.name}'")
+            resultados.append({"arquivo": caminho.name, "status": "cache"})
+            pulados += 1
+            continue
+
+        if not args.forcar:
+            meta_bdex = (catalogo_bdex or {}).get(caminho.name)
+            meta_previa = extrair_metadados_capa(caminho, meta_bdex=meta_bdex)
+            chave_tit = f"TITULO::{meta_previa['titulo']}"
+            if chave_tit in xmls_existentes:
+                xml_ja_pronto = xmls_existentes[chave_tit]
+                print(f"⏭️  Pulando '{caminho.name}' — manual equivalente já em '{xml_ja_pronto.name}'")
+                resultados.append({"arquivo": caminho.name, "status": "cache"})
+                pulados += 1
+                continue
+
         try:
             resultado = processar_pdf(
                 caminho,
                 PASTA_GERADOS,
-                extrair_imgs=not args.sem_imagens,
                 catalogo_bdex=catalogo_bdex,
             )
+            if resultado.get("status") == "ok" and not args.forcar:
+                xml_gerado = Path(resultado["xml"])
+                xmls_existentes[caminho.name] = xml_gerado
+                xmls_existentes[f"TITULO::{resultado['titulo']}"] = xml_gerado
             resultados.append(resultado)
         except Exception as e:
             print(f"  ❌ Erro ao processar '{nome}': {e}")
@@ -849,8 +883,12 @@ def main():
     print("  RESUMO FINAL")
     print(f"{'='*60}")
     ok = [r for r in resultados if r.get("status") == "ok"]
-    print(f"  ✅ {len(ok)}/{len(resultados)} arquivo(s) processado(s) com sucesso")
-    print(f"\n  XMLs gerados em '{PASTA_GERADOS}/':")
+    print(
+        f"  ✅ {len(ok)} novo(s) processado(s) | "
+        f"⏭️ {pulados} em cache (pulados) | "
+        f"Total: {len(resultados)} PDF(s)"
+    )
+    print(f"\n  XMLs ativos em '{PASTA_GERADOS}/':")
     for xml_file in sorted(PASTA_GERADOS.glob("*.xml")):
         print(f"    📝 {xml_file.name}  ({xml_file.stat().st_size / 1024:.1f} KB)")
 

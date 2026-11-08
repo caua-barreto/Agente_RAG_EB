@@ -74,6 +74,12 @@ async def nova_conversa_endpoint():
     return {"status": "ok"}
 
 
+@app.get("/api/catalogo")
+async def catalogo_endpoint():
+    """Retorna o catálogo visual de manuais militares ativos indexados no sistema."""
+    return assistente.obter_catalogo_manuais()
+
+
 # ── Arquivos estáticos (CSS, JS, imagens) ─────────────────────────────────
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 

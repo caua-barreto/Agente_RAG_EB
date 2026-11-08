@@ -112,26 +112,47 @@ _CONFIG_PATH = os.path.join(_DIR, "configuracoes.yaml")
 with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
 
+
 # =====================================================================
-# 2. ESTRUTURAS DE DADOS E MEMÓRIA FIFO
+# 2. ESTRUTURAS DE DADOS, CATÁLOGO DE MANUAIS E MEMÓRIA FIFO
 # =====================================================================
 banco_de_trechos: list = []
+catalogo_manuais: list[dict] = []
 historico_conversa: list[dict[str, str]] = []
 
 
 class TrechoMilitar:
     """Armazena um recorte estruturado de manual com seus metadados."""
 
-    def __init__(self, manual_titulo: str, capitulo: str, secao: str, texto: str):
+    def __init__(
+        self,
+        manual_titulo: str,
+        capitulo: str,
+        secao: str,
+        texto: str,
+        edicao: str = "Ed. Única",
+        ano: str = "S/D",
+        codigo: str = "",
+    ):
         self.manual_titulo = manual_titulo
         self.capitulo = capitulo
         self.secao = secao
         self.texto = texto
+        self.edicao = edicao
+        self.ano = ano
+        self.codigo = codigo
+
+    @property
+    def edicao_formatada(self) -> str:
+        """Retorna a edição combinada com o ano: ex. '5ª Ed. (2021)'."""
+        if self.ano and self.ano != "S/D":
+            return f"{self.edicao} ({self.ano})"
+        return self.edicao
 
     def formatar_para_llm(self) -> str:
         """Retorna o trecho formatado para injeção no contexto do LLM."""
         return (
-            f"[Manual: {self.manual_titulo} | Cap: {self.capitulo} | Sec: {self.secao}]\n"
+            f"[Manual: {self.manual_titulo} | Edição: {self.edicao_formatada} | Cap: {self.capitulo} | Sec: {self.secao}]\n"
             f"{self.texto}\n"
         )
 
@@ -143,7 +164,7 @@ def limpar_historico() -> None:
 
 def _registrar_turno_memoria(pergunta: str, resposta: str) -> None:
     """Adiciona o turno (user + assistant) ao histórico FIFO respeitando max_mensagens."""
-    max_msg = int(config.get("memoria", {}).get("max_mensagens", 6))
+    max_msg = int(config.get("memoria", {}).get("max_mensagens", 4))
     if max_msg <= 0:
         return
     historico_conversa.append({"role": "user", "content": pergunta})
@@ -153,8 +174,11 @@ def _registrar_turno_memoria(pergunta: str, resposta: str) -> None:
 
 
 # =====================================================================
-# 3. LEITURA DOS ARQUIVOS XML
+# 3. LEITURA DOS ARQUIVOS XML E CATÁLOGO DE DOCUMENTOS ATIVOS
 # =====================================================================
+
+_PADRAO_REVOGADO = re.compile(r"(?<![A-Z])REVOGAD[OA]S?(?![A-Z])", re.IGNORECASE)
+
 
 def _texto_valido(texto: str | None) -> str | None:
     """Filtra nós vazios ou marcadores de falha do Pipeline."""
@@ -170,9 +194,82 @@ def _texto_valido(texto: str | None) -> str | None:
     return limpo
 
 
+def _limpar_nome_manual(nome: str) -> str:
+    """Remove resíduos de edição/código do nome do manual e formata com nitidez."""
+    if not nome:
+        return "Manual Militar"
+    # Remove sufixos residuais como "- 1 - aEdição", "| 4ª Edição | 2019", etc.
+    limpo = re.sub(r"\s*[-|]\s*\d+\s*[-|]?\s*[ªºa]?\s*Edi[çc][ãa]o.*$", "", nome, flags=re.IGNORECASE)
+    limpo = re.sub(r"\s*\b\d+\s*[ªºa]?\s*Edi[çc][ãa]o\b.*$", "", limpo, flags=re.IGNORECASE)
+    limpo = re.sub(r"\s*[-|]\s*(19\d{2}|20\d{2})\b.*$", "", limpo)
+    limpo = re.sub(r"\s+-\s+", " ", limpo)
+    limpo = re.sub(r"\s{2,}", " ", limpo).strip(" -|")
+    if limpo.isupper():
+        preposicoes = {"de", "da", "do", "das", "dos", "e", "em", "na", "no", "nas", "nos", "para", "com", "a", "o", "as", "os"}
+        palavras = limpo.title().split()
+        limpo = " ".join(
+            p.lower() if idx > 0 and p.lower() in preposicoes else p
+            for idx, p in enumerate(palavras)
+        )
+    return limpo or nome
+
+
+def _extrair_metadados_xml(raiz, caminho: str) -> dict[str, str]:
+    """Extrai nome_manual, codigo, edicao e ano do bloco <metadados> do XML."""
+    def _ler_tag(tag: str) -> str:
+        no = raiz.find(f".//metadados/{tag}")
+        return no.text.strip() if no is not None and no.text else ""
+
+    titulo_completo = _ler_tag("titulo") or Path(caminho).stem
+    nome_manual = _ler_tag("nome_manual")
+    codigo = _ler_tag("codigo")
+    edicao = _ler_tag("edicao")
+    ano = _ler_tag("ano")
+
+    # Fallback para XMLs antigos que possuam apenas <titulo>
+    if not edicao:
+        m_ed = re.search(r"\b(\d+)\s*[ªºa]?\s*Edi[çc][ãa]o\b", titulo_completo, re.IGNORECASE)
+        edicao = f"{m_ed.group(1)}ª Ed." if m_ed else "Ed. Única"
+
+    if not ano:
+        m_ano = re.findall(r"\b(19\d{2}|20\d{2})\b", titulo_completo)
+        ano = m_ano[-1] if m_ano else "S/D"
+
+    if not codigo:
+        m_cod = re.search(
+            r"\b(EB\d{2}-[A-Z]{2}-\d{2}\.\d+|C-\d+-\d+|MC\s*\d+[\.\-]\d+)\b",
+            titulo_completo,
+            re.IGNORECASE,
+        )
+        codigo = m_cod.group(1).upper() if m_cod else "EB-MC"
+
+    if not nome_manual:
+        partes = [p.strip() for p in titulo_completo.split("|") if p.strip()]
+        candidatos = [
+            p for p in partes
+            if not any(t in p.upper() for t in ("COMANDO DE", "ESTADO-MAIOR", "MANUAL DE CAMPANHA", "SECRETARIA-GERAL", "DEPARTAMENTO DE"))
+            and not re.search(r"\b\d+\s*[ªºa]?\s*Edi[çc][ãa]o\b", p, re.IGNORECASE)
+            and not re.match(r"^(19\d{2}|20\d{2})$", p)
+        ]
+        nome_manual = " ".join(candidatos) if candidatos else titulo_completo
+
+    nome_manual = _limpar_nome_manual(nome_manual)
+
+    return {
+        "titulo_completo": titulo_completo,
+        "nome_manual": nome_manual,
+        "codigo": codigo or "EB-MC",
+        "edicao": edicao,
+        "ano": ano,
+    }
+
+
 def carregar_xmls() -> None:
-    """Lê todos os XMLs da pasta configurada e popula banco_de_trechos."""
+    """Lê todos os XMLs ativos da pasta configurada e popula banco_de_trechos e catalogo_manuais."""
     banco_de_trechos.clear()
+    catalogo_manuais.clear()
+    carregar_siglas()
+
     pasta_xml = config["caminhos"]["pasta_xml"]
     pasta_xml_abs = os.path.join(_DIR, pasta_xml)
     arquivos_xml = sorted(glob.glob(os.path.join(pasta_xml_abs, "*.xml")))
@@ -181,9 +278,14 @@ def carregar_xmls() -> None:
         print(f"AVISO: Nenhum arquivo XML encontrado em '{pasta_xml_abs}'.")
         return
 
-    print(f"Lendo base de dados... {len(arquivos_xml)} manual(is) encontrado(s).")
+    print(f"Lendo base de dados... {len(arquivos_xml)} arquivo(s) XML encontrado(s).")
 
     for caminho in arquivos_xml:
+        nome_arq = os.path.basename(caminho)
+        # Ignora manuais revogados caso algum esteja na pasta de XMLs
+        if _PADRAO_REVOGADO.search(nome_arq):
+            continue
+
         try:
             arvore = etree.parse(caminho)
         except Exception as e:
@@ -191,17 +293,23 @@ def carregar_xmls() -> None:
             continue
 
         raiz = arvore.getroot()
+        meta = _extrair_metadados_xml(raiz, caminho)
 
-        no_titulo = raiz.find(".//metadados/titulo")
-        titulo_manual = (
-            no_titulo.text.strip()
-            if no_titulo is not None and no_titulo.text
-            else "Manual Desconhecido"
-        )
+        if _PADRAO_REVOGADO.search(meta["titulo_completo"]) or _PADRAO_REVOGADO.search(meta["nome_manual"]):
+            continue
+
+        nome_manual = meta["nome_manual"]
+        edicao = meta["edicao"]
+        ano = meta["ano"]
+        codigo = meta["codigo"]
+
+        qtd_capitulos = 0
+        qtd_secoes_validas = 0
 
         # Percorre a árvore preservando a hierarquia (compatível com lxml e ElementTree)
         for filho in raiz:
             if filho.tag == "capitulo":
+                qtd_capitulos += 1
                 cap_num = filho.get("numero", "")
                 cap_tit = filho.get("titulo", "Capítulo Indefinido")
                 cap_nome = f"{cap_num} - {cap_tit}".strip(" -") if cap_num else cap_tit
@@ -212,8 +320,9 @@ def carregar_xmls() -> None:
                     no_txt = secao.find("texto")
                     texto = _texto_valido(no_txt.text if no_txt is not None else None)
                     if texto:
+                        qtd_secoes_validas += 1
                         banco_de_trechos.append(
-                            TrechoMilitar(titulo_manual, cap_nome, secao_nome, texto)
+                            TrechoMilitar(nome_manual, cap_nome, secao_nome, texto, edicao=edicao, ano=ano, codigo=codigo)
                         )
 
             elif filho.tag == "secao":
@@ -223,8 +332,9 @@ def carregar_xmls() -> None:
                 no_txt = filho.find("texto")
                 texto = _texto_valido(no_txt.text if no_txt is not None else None)
                 if texto:
+                    qtd_secoes_validas += 1
                     banco_de_trechos.append(
-                        TrechoMilitar(titulo_manual, "Sem Capítulo", secao_nome, texto)
+                        TrechoMilitar(nome_manual, "Sem Capítulo", secao_nome, texto, edicao=edicao, ano=ano, codigo=codigo)
                     )
 
             elif filho.tag == "anexo":
@@ -234,8 +344,9 @@ def carregar_xmls() -> None:
                 no_txt = filho.find("texto")
                 texto = _texto_valido(no_txt.text if no_txt is not None else None)
                 if texto:
+                    qtd_secoes_validas += 1
                     banco_de_trechos.append(
-                        TrechoMilitar(titulo_manual, cap_nome, secao_nome, texto)
+                        TrechoMilitar(nome_manual, cap_nome, secao_nome, texto, edicao=edicao, ano=ano, codigo=codigo)
                     )
 
             elif filho.tag == "secao_especial":
@@ -243,100 +354,60 @@ def carregar_xmls() -> None:
                 no_txt = filho.find("texto")
                 texto = _texto_valido(no_txt.text if no_txt is not None else None)
                 if texto:
+                    qtd_secoes_validas += 1
                     banco_de_trechos.append(
-                        TrechoMilitar(titulo_manual, "Seção Especial", secao_nome, texto)
+                        TrechoMilitar(nome_manual, "Seção Especial", secao_nome, texto, edicao=edicao, ano=ano, codigo=codigo)
                     )
 
-    print(f"Extração concluída! {len(banco_de_trechos)} recortes carregados.")
+        if qtd_secoes_validas > 0:
+            edicao_completa = f"{edicao} ({ano})" if ano and ano != "S/D" else edicao
+            catalogo_manuais.append(
+                {
+                    "id": nome_arq,
+                    "nome_manual": nome_manual,
+                    "titulo_completo": meta["titulo_completo"],
+                    "codigo": codigo,
+                    "edicao": edicao,
+                    "ano": ano,
+                    "edicao_completa": edicao_completa,
+                    "arquivo": nome_arq,
+                    "capitulos": qtd_capitulos,
+                    "secoes": qtd_secoes_validas,
+                    "status": "ativo",
+                }
+            )
+
+    catalogo_manuais.sort(key=lambda m: m["nome_manual"].lower())
+    print(
+        f"Extração concluída! {len(catalogo_manuais)} manual(is) ativo(s) e "
+        f"{len(banco_de_trechos)} recortes carregados."
+    )
+
+
+def obter_catalogo_manuais() -> dict:
+    """Retorna o catálogo estruturado de manuais ativos indexados."""
+    return {
+        "total_manuais": len(catalogo_manuais),
+        "total_trechos": len(banco_de_trechos),
+        "total_siglas": sum(1 for v in SIGLAS_MILITARES.values() if v),
+        "manuais": catalogo_manuais,
+    }
 
 
 # =====================================================================
-# 4. MOTOR DE BUSCA BM25 — com normalização Unicode e expansão de siglas
+# 4. MOTOR DE BUSCA BM25 — com normalização Unicode e siglas externas
 # =====================================================================
 
-SIGLAS_MILITARES: dict[str, list[str]] = {
-    # Testes e Treinamentos (TFM e Instrução)
-    "tfm":  ["treinamento", "fisico", "militar"],
-    "tiai": ["treinamento", "intervalado", "alta", "intensidade"],
-    "taf":  ["teste", "avaliacao", "fisica"],
-    "tap":  ["teste", "aptidao", "fisica"],
-    "cmb":  ["combate", "manutencao", "boa", "forma"],
-    "ppm":  ["pista", "progressao", "militar", "pentatlo"],
-    "ptc":  ["pista", "treinamento", "circuito"],
-    "tib":  ["tiro", "instrucao", "basico"],
-    "tia":  ["tiro", "instrucao", "avancado"],
-    "tat":  ["tiro", "acao", "tatica"],
-    "pccs": ["preparo", "condicionamento", "combate", "sobrevivencia"],
-    "ou":   ["ordem", "unida"],
-
-    # Organizações e Instituições (EB)
-    "eb":     ["exercito", "brasileiro"],
-    "om":     ["organizacao", "militar"],
-    "qg":     ["quartel", "general"],
-    "ime":    ["instituto", "militar", "engenharia"],
-    "aman":   ["academia", "militar", "agulhas", "negras"],
-    "esa":    ["escola", "sargentos", "armas"],
-    "espcex": ["escola", "preparatoria", "cadetes", "exercito"],
-    "cigs":   ["centro", "instrucao", "guerra", "selva"],
-    "cpor":   ["centro", "preparacao", "oficiais", "reserva"],
-    "npor":   ["nucleo", "preparacao", "oficiais", "reserva"],
-    "esfcex": ["escola", "formacao", "complementar", "exercito"],
-
-    # Cursos e Formações
-    "cfsd": ["curso", "formacao", "soldados"],
-    "cfc":  ["curso", "formacao", "cabos"],
-    "cfs":  ["curso", "formacao", "sargentos"],
-    "cfo":  ["curso", "formacao", "oficiais"],
-    "eib":  ["estagio", "instrucao", "basica"],
-    "epcv": ["estagio", "preparacao", "comandantes", "vtr"],
-
-    # Frações e Escalões (unificado: Bda = Brigada / Boletim)
-    "bda":  ["brigada", "boletim", "acesso", "restrito"],
-    "btl":  ["batalhao"],
-    "cia":  ["companhia"],
-    "pel":  ["pelotao"],
-    "gc":   ["grupo", "combate"],
-    "sqd":  ["esquadrao"],
-    "bia":  ["bateria"],
-
-    # Documentos e Manuais
-    "ip":   ["instrucao", "provisoria"],
-    "ig":   ["instrucoes", "gerais"],
-    "ir":   ["instrucoes", "reguladoras"],
-    "mc":   ["manual", "campanha"],
-    "mt":   ["manual", "tecnico"],
-    "cise": ["caderno", "instrucao", "suporte", "ensino"],
-    "pci":  ["pedido", "cooperacao", "instrucao"],
-    "bi":   ["boletim", "interno"],
-    "bg":   ["boletim", "geral"],
-
-    # Funções, Seções e Especialidades
-    "cmt":  ["comandante"],
-    "scmt": ["subcomandante"],
-    "adj":  ["adjunto"],
-    "pqd":  ["paraquedista"],
-    "pe":   ["policia", "exercito"],
-    "s1":   ["secao", "pessoal"],
-    "s2":   ["secao", "inteligencia"],
-    "s3":   ["secao", "operacoes"],
-    "s4":   ["secao", "logistica"],
-
-    # Diversos (Operacionais e Administrativos)
-    "glo":  ["garantia", "lei", "ordem"],
-    "vtr":  ["viatura"],
-    "armt": ["armamento"],
-    "mto":  ["manutencao"],
-    "sup":  ["suprimento"],
-    "epi":  ["equipamento", "protecao", "individual"],
-    "ev":   ["efetivo", "variavel"],
-    "ep":   ["efetivo", "profissional"],
-
-    # Exceções / Ambíguos
-    "c":    [],
-    "a":    [],
-    "o":    [],
+_SIGLAS_PADRAO: dict[str, list[str]] = {
+    "tfm": ["treinamento", "fisico", "militar"],
+    "taf": ["teste", "avaliacao", "fisica"],
+    "ou": ["ordem", "unida"],
+    "eb": ["exercito", "brasileiro"],
+    "om": ["organizacao", "militar"],
+    "glo": ["garantia", "lei", "ordem"],
 }
 
+SIGLAS_MILITARES: dict[str, list[str]] = dict(_SIGLAS_PADRAO)
 motor_bm25 = None  # instância global do BM25
 
 
@@ -349,6 +420,52 @@ def _normalizar(texto: str) -> str:
     nfkd = unicodedata.normalize("NFKD", texto.lower())
     sem_acento = "".join(c for c in nfkd if not unicodedata.combining(c))
     return re.sub(r"[^\w\s]", " ", sem_acento)
+
+
+def carregar_siglas() -> dict[str, list[str]]:
+    """
+    Carrega o dicionário de siglas militares a partir do arquivo externo
+    configurado em configuracoes.yaml (padrão: siglas.yaml).
+    """
+    global SIGLAS_MILITARES
+    arq_siglas = config.get("caminhos", {}).get("arquivo_siglas", "siglas.yaml")
+    caminho_siglas = os.path.join(_DIR, arq_siglas)
+
+    if not os.path.exists(caminho_siglas):
+        print(f"AVISO: Arquivo de siglas '{caminho_siglas}' não encontrado. Usando padrão interno.")
+        SIGLAS_MILITARES = dict(_SIGLAS_PADRAO)
+        return SIGLAS_MILITARES
+
+    try:
+        with open(caminho_siglas, "r", encoding="utf-8") as f:
+            dados = yaml.safe_load(f) or {}
+        fonte = dados.get("siglas", dados) if isinstance(dados, dict) else {}
+        siglas_carregadas: dict[str, list[str]] = {}
+        for chave, valores in fonte.items():
+            chave_norm = _normalizar(str(chave)).strip()
+            if not chave_norm:
+                continue
+            if isinstance(valores, list):
+                termos = []
+                for v in valores:
+                    termos.extend(_normalizar(str(v)).split())
+                siglas_carregadas[chave_norm] = termos
+            elif isinstance(valores, str):
+                siglas_carregadas[chave_norm] = _normalizar(valores).split()
+            else:
+                siglas_carregadas[chave_norm] = []
+
+        if siglas_carregadas:
+            SIGLAS_MILITARES = siglas_carregadas
+    except Exception as e:
+        print(f"AVISO: Erro ao ler '{caminho_siglas}' ({e}). Usando siglas padrão.")
+        SIGLAS_MILITARES = dict(_SIGLAS_PADRAO)
+
+    return SIGLAS_MILITARES
+
+
+# Inicializa as siglas ao importar o módulo
+carregar_siglas()
 
 
 def _expandir_siglas(tokens: list[str]) -> list[str]:
@@ -374,22 +491,26 @@ def preparar_motor_de_busca() -> None:
     textos_tokenizados = []
     for trecho in banco_de_trechos:
         texto_rico = (
-            f"{trecho.manual_titulo} {trecho.capitulo} {trecho.secao} {trecho.texto}"
+            f"{trecho.manual_titulo} {trecho.codigo} {trecho.edicao} {trecho.ano} "
+            f"{trecho.capitulo} {trecho.secao} {trecho.texto}"
         )
         tokens = _normalizar(texto_rico).split()
         textos_tokenizados.append(tokens)
 
     motor_bm25 = BM25Okapi(textos_tokenizados)
-    print("Motor de busca BM25 calibrado e pronto.")
+    print(f"Motor de busca BM25 calibrado e pronto ({len(SIGLAS_MILITARES)} siglas ativas).")
 
 
-def buscar_trechos_relevantes(pergunta: str, top_n: int = 8) -> list[TrechoMilitar]:
+def buscar_trechos_relevantes(pergunta: str, top_n: int | None = None) -> list[TrechoMilitar]:
     """
     Retorna os top_n trechos mais relevantes para a pergunta usando BM25.
     Aplica normalização Unicode, remoção de pontuação e expansão de siglas na query.
     """
     if motor_bm25 is None:
         return []
+
+    if top_n is None:
+        top_n = int(config.get("busca", {}).get("top_n", 10))
 
     tokens_base = _normalizar(pergunta).split()
     tokens_expandidos = _expandir_siglas(tokens_base)
@@ -413,8 +534,9 @@ def buscar_trechos_relevantes(pergunta: str, top_n: int = 8) -> list[TrechoMilit
 def perguntar_ao_assistente_stream(pergunta_usuario: str):
     """Orquestra a busca RAG e envia a chamada para o LLM DeepSeek, retornando um gerador de texto."""
 
-    # 1. Recupera trechos relevantes
-    documentos = buscar_trechos_relevantes(pergunta_usuario, top_n=8)
+    # 1. Recupera trechos relevantes conforme configurado em configuracoes.yaml
+    top_n = int(config.get("busca", {}).get("top_n", 10))
+    documentos = buscar_trechos_relevantes(pergunta_usuario, top_n=top_n)
 
     # 2. Monta o contexto numerado
     if documentos:
